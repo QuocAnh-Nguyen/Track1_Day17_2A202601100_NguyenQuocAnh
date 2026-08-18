@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vlearn · Gradient Descent · Study Space</title>
+  <style>
+    /* =========================================================
+       Design tokens
+       ========================================================= */
+    :root {
+      --bg:               #f7f8fa;
+      --panel:            #ffffff;
+      --panel-border:     rgba(0, 0, 0, 0.05);
+      --text:             #1f2937;
+      --muted:            #6b7280;
+      --accent:           #2563eb;
+      --accent-hover:     #1d4ed8;
+      --accent-soft:      #eff6ff;
+      --highlight:        #fff3a0;
+      --highlight-border: #fde047;
+      --border:           #e5e7eb;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+      --radius: 12px;
+      --fade-ms: 250ms;
+    }
+
+    /* =========================================================
+       Reset & base
+       ========================================================= */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* =========================================================
+       App grid (60 / 40 split, full screen, no body scroll)
+       ========================================================= */
+    .app {
+      display: grid;
+      grid-template-columns: 60% 40%;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* =========================================================
+       Reset button (top-right, subtle)
+       ========================================================= */
+    #reset-btn {
+      position: fixed;
+      top: 14px;
+      right: 16px;
+      z-index: 50;
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+    }
+    #reset-btn:hover {
+      background: #fafafa;
+      color: var(--text);
+      border-color: #d1d5db;
+    }
+
+    /* =========================================================
+       Left panel — Document / Slide viewer
+       ========================================================= */
+    .slide-viewer {
+      overflow-y: auto;
+      padding: 28px 24px 60px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .slide-page {
+      background: var(--panel);
+      border-radius: var(--radius);
+      border: 1px solid var(--panel-border);
+      box-shadow: var(--shadow-sm);
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 40px 40px;
+    }
+    .slide-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .slide-meta .pill {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .slide-page h1 {
+      font-size: 26px;
+      margin: 0 0 6px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .slide-page h2 {
+      font-size: 17px;
+      margin: 24px 0 8px;
+      font-weight: 600;
+    }
+    .slide-page p { margin: 0 0 14px; color: #374151; }
+    .slide-page .formula {
+      font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin: 12px 0 18px;
+      font-size: 14px;
+      overflow-x: auto;
+      text-align: center;
+    }
+    .slide-page ul { margin: 0 0 14px; padding-left: 20px; color: #374151; }
+    .slide-page ul li { margin: 4px 0; }
+
+    /* The highlighted sentence — yellow background */
+    .highlight {
+      background: var(--highlight);
+      border-left: 3px solid var(--highlight-border);
+      padding: 1px 5px;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(253, 224, 71, 0.3);
+    }
+
+    /* =========================================================
+       Right panel — My Study Space
+       ========================================================= */
+    .study-space {
+      position: relative;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .study-space-header {
+      padding: 20px 24px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .study-space-header h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .study-space-header p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* State wrappers — fade handled via .active (opacity), .hidden kills layout.
+       .hidden is display:none as required; opacity transition runs whenever
+       the element is in flow. */
+    .state {
+      flex: 1;
+      overflow-y: auto;
+      padding: 22px 24px 32px;
+      opacity: 0;
+      transition: opacity var(--fade-ms) ease;
+    }
+    .state.active { opacity: 1; }
+    .hidden { display: none !important; }
+
+    /* Highlight-link chip in the common state */
+    .highlight-chip {
+      display: block;
+      background: #fffef5;
+      border: 1px solid var(--highlight-border);
+      border-left: 3px solid var(--highlight-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    .chip-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #92400e;
+      margin-bottom: 6px;
+    }
+    .chip-label::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--highlight);
+      border: 1px solid var(--highlight-border);
+      border-radius: 2px;
+    }
+    .chip-text {
+      font-size: 13px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+
+    /* Note textarea */
+    .note-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .note-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--text);
+      background: #fcfcfd;
+      resize: vertical;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    /* CTA button */
+    #trigger-ai-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 150ms ease, transform 100ms ease;
+    }
+    #trigger-ai-btn:hover { background: var(--accent-hover); }
+    #trigger-ai-btn:active { transform: translateY(1px); }
+    #trigger-ai-btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    /* Option placeholder cards */
+    .option-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      height: 100%;
+      min-height: 280px;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+    .option-badge {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .option-placeholder h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .option-placeholder .sub {
+      font-size: 13px;
+    }
+
+    /* =========================================================
+       Loading overlay (AI processing simulation)
+       ========================================================= */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.9);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 20;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+    }
+    #loading-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* Scrollbar polish */
+    .slide-viewer::-webkit-scrollbar,
+    .state::-webkit-scrollbar { width: 8px; }
+    .slide-viewer::-webkit-scrollbar-thumb,
+    .state::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 4px;
+    }
+    .slide-viewer::-webkit-scrollbar-thumb:hover,
+    .state::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+  </style>
+</head>
+<body>
+  <!-- Subtle reset / back-to-lecture button -->
+  <button id="reset-btn" type="button">&#x21BA; Reset / Back to Lecture</button>
+
+  <div class="app">
+
+    <!-- ===================================================
+         LEFT (60%) — Document / Slide Viewer
+         =================================================== -->
+    <section class="slide-viewer" aria-label="Document / Slide Viewer">
+      <article class="slide-page">
+        <div class="slide-meta">
+          <span>Optimisation Fundamentals &middot; Slide 12 / 24</span>
+          <span class="pill">Lecture</span>
+        </div>
+
+        <h1>Gradient Descent</h1>
+        <p>
+          Gradient descent is a first-order iterative optimisation algorithm used to
+          find a local minimum of a differentiable function. At each step, the
+          algorithm moves in the direction of the steepest descent &mdash; the opposite
+          of the gradient &mdash; to progressively reduce the loss.
+        </p>
+
+        <h2>Update rule</h2>
+        <div class="formula">&theta;<sub>t+1</sub> = &theta;<sub>t</sub> &minus; &eta; &middot; &nabla;J(&theta;<sub>t</sub>)</div>
+        <p>
+          where <em>&theta;</em> is the parameter vector, <em>J</em> the cost function,
+          <em>&eta;</em> the learning rate, and <em>&nabla;J(&theta;<sub>t</sub>)</em>
+          the gradient of the cost with respect to the parameters at step <em>t</em>.
+        </p>
+
+        <h2>Intuition: the gradient as a direction</h2>
+        <p>
+          <mark class="highlight">The gradient vector points in the direction of the greatest rate of increase of the function.</mark>
+          Consequently, to descend toward a minimum we step in the opposite direction
+          &mdash; the negative gradient &mdash; proportional to the learning rate.
+        </p>
+
+        <h2>Why it matters</h2>
+        <ul>
+          <li>The gradient encodes both magnitude and direction of steepest ascent in parameter space.</li>
+          <li>A small learning rate makes progress slow but stable; a large one can overshoot or diverge.</li>
+          <li>The gradient is derived analytically from the partial derivatives of the cost function.</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- ===================================================
+         RIGHT (40%) — My Study Space
+         =================================================== -->
+    <aside class="study-space" aria-label="My Study Space">
+
+      <div class="study-space-header">
+        <h3>My Study Space</h3>
+        <p>Notes & questions on this slide</p>
+      </div>
+
+      <!-- Loading overlay sits above all states -->
+      <div id="loading-overlay" aria-hidden="true">
+        <div class="spinner" role="status" aria-live="polite"></div>
+        <div class="loading-text">AI đang suy nghĩ&hellip;</div>
+      </div>
+
+      <!-- ===== Common context state (initial, visible) ===== -->
+      <div id="common-context-state" class="state active">
+        <div class="highlight-chip">
+          <span class="chip-label">Linked to highlight &middot; Slide 12</span>
+          <span class="chip-text">&ldquo;The gradient vector points in the direction of the greatest rate of increase&hellip;&rdquo;</span>
+        </div>
+
+        <div class="note-block">
+          <label class="note-label" for="study-note">Your note / question</label>
+          <textarea id="study-note" placeholder="Type your question or note about this highlight&hellip;">Mình hiểu cách tính đạo hàm ra con số, nhưng tại sao vector gradient lại luôn chỉ hướng dốc nhất trên đồ thị không gian? Ý nghĩa hình học của nó tưởng tượng thế nào cho dễ hiểu?</textarea>
+        </div>
+
+        <button id="trigger-ai-btn" type="button">
+          <span>Ask AI / Submit</span>
+        </button>
+      </div>
+
+      <!-- ===== Option A (Personalized notes) ===== -->
+      <div id="option-a-state" class="state hidden">
+        <div class="option-placeholder">
+          <span class="option-badge">Option A</span>
+          <h2>Option A placeholder</h2>
+          <span class="sub">Personalized notes</span>
+        </div>
+      </div>
+
+      <!-- ===== Option B (Socratic tutor) ===== -->
+      <div id="option-b-state" class="state hidden">
+        <div class="option-placeholder">
+          <span class="option-badge">Option B</span>
+          <h2>Option B placeholder</h2>
+          <span class="sub">Socratic tutor</span>
+        </div>
+      </div>
+
+      <!-- ===== Option C (Lab coach grouping) ===== -->
+      <div id="option-c-state" class="state hidden">
+        <div class="option-placeholder">
+          <span class="option-badge">Option C</span>
+          <h2>Option C placeholder</h2>
+          <span class="sub">Lab coach grouping</span>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* =========================================================
+         Configuration
+         ---------------------------------------------------------
+         Change currentPrototypeOption to 'A', 'B', or 'C' to
+         test the matching interaction branch.
+         ========================================================= */
+      const currentPrototypeOption = "A";
+
+      /* =========================================================
+         Constants
+         ========================================================= */
+      const PREFILLED_NOTE =
+        "Mình hiểu cách tính đạo hàm ra con số, nhưng tại sao vector gradient lại luôn chỉ hướng dốc nhất trên đồ thị không gian? Ý nghĩa hình học của nó tưởng tượng thế nào cho dễ hiểu?";
+      const AI_DELAY_MS = 1000;
+      const FADE_MS = 250;
+
+      /* =========================================================
+         DOM references
+         ========================================================= */
+      const states = {
+        common: document.getElementById("common-context-state"),
+        A: document.getElementById("option-a-state"),
+        B: document.getElementById("option-b-state"),
+        C: document.getElementById("option-c-state"),
+      };
+      const optionKeys = ["A", "B", "C"];
+      const triggerBtn = document.getElementById("trigger-ai-btn");
+      const resetBtn = document.getElementById("reset-btn");
+      const noteTextarea = document.getElementById("study-note");
+      const loadingOverlay = document.getElementById("loading-overlay");
+
+      /* =========================================================
+         Helpers
+         ========================================================= */
+      function getAllStateEls() {
+        return [states.common, states.A, states.B, states.C];
+      }
+
+      function showLoading() {
+        loadingOverlay.classList.add("visible");
+        loadingOverlay.setAttribute("aria-hidden", "false");
+      }
+
+      function hideLoading() {
+        loadingOverlay.classList.remove("visible");
+        loadingOverlay.setAttribute("aria-hidden", "true");
+      }
+
+      // Reveal an element with a fade-in: remove .hidden first, then on the
+      // next two animation frames add .active so the opacity transition runs.
+      function reveal(targetEl) {
+        targetEl.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => targetEl.classList.add("active"));
+        });
+      }
+
+      // Fade out + fully hide an element (display: none) after the fade completes.
+      function fadeOutAndHide(targetEl) {
+        targetEl.classList.remove("active");
+        setTimeout(() => targetEl.classList.add("hidden"), FADE_MS);
+      }
+
+      // Reset the CTA button to its resting state.
+      function resetTriggerButton() {
+        triggerBtn.disabled = false;
+        triggerBtn.innerHTML = "<span>Ask AI / Submit</span>";
+      }
+
+      // Force-hide all option states (defensive cleanup).
+      function hideAllOptionStates() {
+        optionKeys.forEach((key) => {
+          const el = states[key];
+          el.classList.remove("active");
+          el.classList.add("hidden");
+        });
+      }
+
+      /* =========================================================
+         Trigger AI: common -> loading -> matching option state
+         ========================================================= */
+      triggerBtn.addEventListener("click", () => {
+        const optionKey = currentPrototypeOption.toUpperCase();
+        const target = states[optionKey];
+        if (!target) {
+          console.error("Unknown currentPrototypeOption:", currentPrototypeOption);
+          return;
+        }
+
+        triggerBtn.disabled = true;
+        triggerBtn.textContent = "Submitting\u2026";
+
+        // 1. Fade the common context state out (loading overlay covers it).
+        states.common.classList.remove("active");
+        // Fully remove it from flow once the fade completes.
+        setTimeout(() => states.common.classList.add("hidden"), FADE_MS);
+
+        // 2. Show the AI "thinking" overlay.
+        showLoading();
+
+        // 3. After the simulated AI delay, swap in the selected option state.
+        setTimeout(() => {
+          hideLoading();
+          hideAllOptionStates(); // defensive: never show two option states at once
+          reveal(target);
+          resetTriggerButton(); // ready for the next cycle if user resets
+        }, AI_DELAY_MS);
+      });
+
+      /* =========================================================
+         Reset: hide everything, restore common state, reset inputs
+         ========================================================= */
+      resetBtn.addEventListener("click", () => {
+        hideLoading();
+        resetTriggerButton();
+
+        // Fade out + hide whichever option state may be currently visible.
+        const activeOption = optionKeys
+          .map((k) => states[k])
+          .find((el) => el.classList.contains("active") && !el.classList.contains("hidden"));
+
+        const restoreCommon = () => {
+          // Defensive: make sure no option state is lingering.
+          hideAllOptionStates();
+          reveal(states.common);
+          if (noteTextarea) noteTextarea.value = PREFILLED_NOTE;
+        };
+
+        if (activeOption) {
+          activeOption.classList.remove("active");
+          setTimeout(() => {
+            activeOption.classList.add("hidden");
+            restoreCommon();
+          }, FADE_MS);
+        } else {
+          // Either the common state is already visible, or it was hidden by the
+          // CTA flow — restore it.
+          if (states.common.classList.contains("hidden")) {
+            restoreCommon();
+          } else {
+            states.common.classList.add("active");
+            if (noteTextarea) noteTextarea.value = PREFILLED_NOTE;
+          }
+        }
+      });
+
+      /* =========================================================
+         Init — guarantee a single visible state on load
+         ========================================================= */
+      optionKeys.forEach((k) => {
+        states[k].classList.add("hidden");
+        states[k].classList.remove("active");
+      });
+      states.common.classList.remove("hidden");
+      states.common.classList.add("active");
+      if (noteTextarea) noteTextarea.value = PREFILLED_NOTE;
+    })();
+  </script>
+</body>
+</html>
