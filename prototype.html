@@ -8,24 +8,20 @@
   <!--
   AI Notes — Common Context Prototype
   ------------------------------------
-  Common context dùng chung cho 3 micro-prototype (Option A/B/C) theo Chặng 4.
-  - #lessonView  = "COMMON CONTEXT" — giống nhau 100% giữa 3 option, không đổi khi
-    chuyển option, không bị mất dữ liệu khi bấm Reset.
-  - Bấm "Hoàn thành bài học" → renderResult(option) hiển thị phần
-    "CRITICAL INTERACTION" + "RESULT / USER DECISION" riêng cho từng option
-    (hiện đang là canned output theo đúng scope Chặng 4 — chưa cần model/API thật).
-  - Để build option thật: thay nội dung trả về trong templateA()/templateB()/templateC()
-    và logic trong bindHandlers() bằng lời gọi API / state thật, giữ nguyên layout,
-    class và cấu trúc DOM đã có để không phải build lại phần common context.
-  - Dùng pill A/B/C trên thanh Prototype Controls để xem thử từng option — đây là
-    control của prototype, KHÔNG phải UI sản phẩm thật (không hiện nhãn "Option X"
-    bên trong khung nội dung, chỉ hiện ở thanh trên).
-  - Nút "↺ Reset" đưa về đúng common context ban đầu, fixture không đổi — khớp
-    "Definition of testable" (mọi option bắt đầu từ cùng context, có đường reset).
-  - Panel "🗒 Ghi chú facilitator" chứa annotation (We expect / Watch for /
-    Do not explain) cho từng option — ẩn khỏi khung nội dung chính, chỉ facilitator
-    mở xem, đúng tinh thần "Đặt annotation ngoài frame, không hiện cho tester".
--->
+  Two-panel persistent layout:
+  - LEFT panel: slide deck (common context, giong nhau 100% giua 3 option).
+    Single-slide view voi prev/next + dot indicators. Tester co the click text de
+    toggle highlight, bam "Chua hieu", them ghi chu truc tiep tu slide.
+  - RIGHT panel co 2 state:
+      State 1 (notes): "Ghi chu cua ban" - danh sach note co cau truc, group theo
+        slide, edit/delete duoc, live re-render moi khi left panel doi.
+      State 2 (result): sau khi bam "Hoan thanh bai hoc" o slide cuoi, panel gian
+        ra ~50% va render option A/B/C (canned output - chua goi API that).
+  - Pill A/B/C tren proto-bar: o State 1 khong doi gi; o State 2 re-render template.
+  - Reset: khoi phuc fixture goc, xoa het edit cua tester.
+  - Collapse toggle tren right panel: thu ve ~44px (chi icon) de slides rong hon.
+  - Facilitator drawer: annotation cho tung option, an khoi tester.
+  -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -37,6 +33,7 @@
       --bg: #E7E4DA;
       --paper: #F5F3EE;
       --paper-2: #ECE9DF;
+      --paper-3: #E1DDD0;
       --ink: #1E2422;
       --muted: #5B5F59;
       --chalk: #35514A;
@@ -49,6 +46,8 @@
       --font-serif: 'IBM Plex Serif', Georgia, serif;
       --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+      --col-right: 380px;
+      --t-layout: 320ms cubic-bezier(.4, 0, .2, 1);
     }
 
     /* ===================== Base ===================== */
@@ -105,7 +104,7 @@
       border: 0;
     }
 
-    /* ===================== Prototype controls bar (meta layer) ===================== */
+    /* ===================== Proto bar (meta layer) ===================== */
     .proto-bar {
       background: var(--ink);
       color: var(--paper);
@@ -152,6 +151,7 @@
     }
 
     .pill {
+      position: relative;
       border: none;
       background: transparent;
       color: rgba(245, 243, 238, .7);
@@ -173,6 +173,33 @@
       color: var(--paper);
     }
 
+    .pill-tooltip {
+      position: absolute;
+      top: calc(100% + 9px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: .74rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      padding: .5rem .7rem;
+      border-radius: 6px;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .28);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease;
+      z-index: 60;
+    }
+
+    .pill:hover .pill-tooltip,
+    .pill:focus-visible .pill-tooltip {
+      opacity: 1;
+    }
+
     .notes-toggle,
     .reset-btn {
       background: transparent;
@@ -192,13 +219,35 @@
       border-color: rgba(245, 243, 238, .65);
     }
 
-    /* ===================== Canvas & lesson view (COMMON CONTEXT) ===================== */
+    /* ===================== Canvas grid ===================== */
     .canvas {
-      max-width: 720px;
-      margin: 2.5rem auto 4rem;
+      max-width: 1240px;
+      margin: 2rem auto 4rem;
+      padding: 0 1.5rem;
+    }
+
+    .canvas-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--col-right);
+      gap: 1.5rem;
+      align-items: start;
+      transition: grid-template-columns var(--t-layout);
+    }
+
+    .canvas-grid[data-view="result"] {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .canvas-grid[data-collapsed="true"] {
+      grid-template-columns: minmax(0, 1fr) 44px;
+    }
+
+    /* ===================== LEFT: slide panel ===================== */
+    .slide-panel {
       background: var(--paper);
       border-left: 3px solid var(--chalk);
-      padding: 2.25rem 2.5rem 2.5rem;
+      padding: 2.25rem 2.5rem 2rem;
+      min-height: 600px;
     }
 
     .breadcrumb {
@@ -220,30 +269,50 @@
       color: var(--muted);
       font-size: .9rem;
       line-height: 1.55;
-      margin: 0 0 1.75rem;
+      margin: 0 0 1.5rem;
+    }
+
+    .slide-dots {
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .slide-dot {
+      width: 30px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--paper-3);
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      transition: background .2s ease, box-shadow .2s ease;
+    }
+
+    .slide-dot.has-marker {
+      background: var(--highlighter);
+    }
+
+    .slide-dot.active {
+      background: var(--chalk);
+    }
+
+    .slide-dot.has-marker.active {
+      background: var(--chalk);
+      box-shadow: 0 0 0 2px var(--highlighter);
+    }
+
+    .slide-counter {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      letter-spacing: .04em;
+      color: var(--muted);
     }
 
     .slide-card {
-      padding: 1.25rem 0;
-      border-bottom: 1px solid var(--line);
-      animation: fadeInUp .45s ease both;
-    }
-
-    .slide-card:last-of-type {
-      border-bottom: none;
-      padding-bottom: .5rem;
-    }
-
-    .slide-card:nth-of-type(1) {
-      animation-delay: .05s;
-    }
-
-    .slide-card:nth-of-type(2) {
-      animation-delay: .15s;
-    }
-
-    .slide-card:nth-of-type(3) {
-      animation-delay: .25s;
+      animation: fadeInUp .3s ease both;
     }
 
     .eyebrow {
@@ -257,20 +326,59 @@
 
     .slide-card h3 {
       font-weight: 500;
-      font-size: 1.15rem;
-      margin: 0 0 .55rem;
+      font-size: 1.2rem;
+      margin: 0 0 .65rem;
     }
 
-    .slide-card p {
-      line-height: 1.65;
+    .slide-body {
+      line-height: 1.7;
       margin: 0 0 .6rem;
+    }
+
+    .mark-target {
+      cursor: pointer;
+      border-radius: 2px;
+      padding: .05em .15em;
+      transition: background-color .15s ease, box-shadow .15s ease;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    .mark-target:hover {
+      box-shadow: inset 0 -2px 0 var(--highlighter);
+    }
+
+    .mark-target.active {
+      background-color: var(--highlighter);
+    }
+
+    .mark-target.active:hover {
+      box-shadow: none;
+      filter: brightness(.96);
+    }
+
+    .mark-target.pulse {
+      animation: pulseHl .9s ease;
+    }
+
+    .formula-text {
+      font-family: var(--font-mono);
+      font-size: .94em;
+    }
+
+    .hl-hint {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      color: var(--muted);
+      letter-spacing: .04em;
+      margin-top: .55rem;
     }
 
     .tags {
       display: flex;
       gap: .5rem;
       flex-wrap: wrap;
-      margin-top: .3rem;
+      margin-top: .75rem;
     }
 
     .tag {
@@ -297,54 +405,122 @@
       border: 1px solid rgba(184, 86, 15, .35);
     }
 
-    .mark {
-      background-color: var(--highlighter);
-      background-image: linear-gradient(var(--highlighter), var(--highlighter));
-      padding: .05em .15em;
-      border-radius: 2px;
-      box-decoration-break: clone;
-      -webkit-box-decoration-break: clone;
-    }
-
-    .formula-text {
-      font-family: var(--font-mono);
-      font-size: .94em;
-    }
-
     .note-callout {
       position: relative;
       background: var(--paper-2);
       border-left: 3px solid var(--chalk);
-      padding: .75rem 1rem .75rem 2.15rem;
-      margin-top: .75rem;
+      padding: .7rem 1rem .7rem 2.15rem;
+      margin-top: .7rem;
       font-size: .9rem;
-      transform: rotate(-.35deg);
       border-radius: 2px;
     }
 
     .note-callout::before {
-      content: "✎";
+      content: "\270E";
       position: absolute;
       left: .7rem;
-      top: .62rem;
+      top: .6rem;
       font-size: .85rem;
       color: var(--chalk);
     }
 
     .note-callout p {
       font-style: italic;
+      line-height: 1.55;
     }
 
-    .cta-row {
-      margin-top: 2rem;
+    .slide-actions {
       display: flex;
-      justify-content: flex-end;
-      gap: .75rem;
+      gap: .5rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
     }
 
-    .cta-row.back {
-      justify-content: flex-start;
-      margin-top: 2.5rem;
+    .slide-action {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .8rem;
+      padding: .38rem .75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color .15s ease, color .15s ease, background .15s ease;
+    }
+
+    .slide-action:hover {
+      border-color: var(--chalk);
+      color: var(--chalk);
+    }
+
+    .slide-action.active {
+      background: var(--flag-bg);
+      border-color: var(--flag);
+      color: var(--flag);
+    }
+
+    .slide-editor {
+      margin-top: .9rem;
+      background: var(--paper-2);
+      border-left: 3px solid var(--chalk);
+      border-radius: 4px;
+      padding: .85rem 1rem;
+      animation: fadeInUp .2s ease;
+    }
+
+    .slide-editor-label {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin-bottom: .45rem;
+    }
+
+    .slide-editor textarea,
+    .add-note-form textarea,
+    .add-note-form select,
+    .cluster-feedback {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--paper);
+      padding: .55rem .65rem;
+      font-family: var(--font-sans);
+      font-size: .88rem;
+      line-height: 1.5;
+      color: var(--ink);
+      resize: vertical;
+    }
+
+    .slide-editor textarea {
+      min-height: 72px;
+    }
+
+    .slide-editor textarea:focus,
+    .add-note-form textarea:focus,
+    .add-note-form select:focus,
+    .cluster-feedback:focus {
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+      border-color: var(--focus);
+    }
+
+    .slide-editor-actions,
+    .add-note-form-actions {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+      margin-top: .6rem;
+    }
+
+    .slide-nav {
+      margin-top: 1.9rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: .75rem;
     }
 
     /* ===================== Buttons ===================== */
@@ -386,8 +562,13 @@
       transition: background .2s ease;
     }
 
-    .btn-ghost:hover {
+    .btn-ghost:hover:not(:disabled) {
       background: rgba(53, 81, 74, .08);
+    }
+
+    .btn-ghost:disabled {
+      opacity: .35;
+      cursor: not-allowed;
     }
 
     .btn-ghost.small {
@@ -404,21 +585,387 @@
       text-decoration: underline;
       cursor: pointer;
       padding: .25rem 0;
+      text-align: left;
     }
 
-    /* ===================== Result view (CRITICAL INTERACTION + RESULT) ===================== */
-    .result-card {
-      animation: fadeInUp .4s ease;
+    /* ===================== RIGHT: shared panel shell ===================== */
+    .right-panel {
+      position: sticky;
+      top: 74px;
+      background: var(--paper);
+      border-left: 3px solid var(--highlighter);
+      padding: 2rem 1.6rem 1.75rem;
+      min-height: 600px;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      transition: padding var(--t-layout);
+      display: flex;
+      flex-direction: column;
     }
 
-    .result-card h2 {
+    .canvas-grid[data-view="result"] .right-panel {
+      border-left-color: var(--chalk);
+      padding: 2.25rem 2.4rem 2rem;
+    }
+
+    .canvas-grid[data-collapsed="true"] .right-panel {
+      padding: 2rem .4rem 1rem;
+      align-items: center;
+      overflow: visible;
+    }
+
+    .right-collapse {
+      position: absolute;
+      top: .9rem;
+      left: -14px;
+      width: 28px;
+      height: 28px;
+      background: var(--ink);
+      color: var(--paper);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: .85rem;
+      z-index: 5;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+      transition: background .15s ease;
+    }
+
+    .right-collapse:hover {
+      background: var(--chalk-dark);
+    }
+
+    .right-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: .5rem;
+      padding-bottom: .85rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .right-header h2 {
       font-weight: 600;
-      font-size: 1.5rem;
-      margin: .3rem 0 1.25rem;
+      font-size: 1.2rem;
     }
 
-    .result-card>.eyebrow {
-      margin-bottom: .5rem;
+    .note-count {
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* collapsed rail */
+    .right-collapsed-icons {
+      display: none;
+      flex-direction: column;
+      gap: .75rem;
+      align-items: center;
+      margin-top: 2.2rem;
+    }
+
+    .canvas-grid[data-collapsed="true"] .right-collapsed-icons {
+      display: flex;
+    }
+
+    .canvas-grid[data-collapsed="true"] .notes-view,
+    .canvas-grid[data-collapsed="true"] .option-view {
+      display: none;
+    }
+
+    .rail-icon {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--paper-2);
+      border: none;
+      border-radius: 6px;
+      font-size: .85rem;
+      cursor: default;
+    }
+
+    .rail-icon .badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: var(--flag);
+      color: var(--paper);
+      font-family: var(--font-mono);
+      font-size: .58rem;
+      min-width: 15px;
+      height: 15px;
+      padding: 0 3px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ===================== RIGHT State 1: notes ===================== */
+    .add-note-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 1rem;
+    }
+
+    .add-note-btn {
+      background: transparent;
+      border: 1px dashed var(--chalk);
+      color: var(--chalk);
+      font-size: .82rem;
+      font-weight: 500;
+      padding: .5rem .85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .15s ease, border-style .15s ease;
+    }
+
+    .add-note-btn:hover {
+      background: rgba(53, 81, 74, .06);
+      border-style: solid;
+    }
+
+    .add-note-form {
+      background: var(--paper-2);
+      border-radius: 6px;
+      padding: .85rem;
+      margin-bottom: 1rem;
+      animation: fadeInUp .2s ease;
+    }
+
+    .add-note-form label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin: 0 0 .3rem;
+    }
+
+    .add-note-form select {
+      margin-bottom: .6rem;
+    }
+
+    .add-note-form textarea {
+      min-height: 72px;
+    }
+
+    .notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .note-section {
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+
+    .note-section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: .5rem;
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+    }
+
+    .note-section-title {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .note-section-header .count {
+      background: var(--paper-3);
+      padding: .12em .55em;
+      border-radius: 999px;
+      font-size: .65rem;
+      white-space: nowrap;
+    }
+
+    .note-section-empty {
+      font-size: .82rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .note-card {
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .7rem .8rem;
+      transition: border-color .15s ease;
+    }
+
+    .note-card.flash {
+      animation: noteFlash 1s ease;
+    }
+
+    .note-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .5rem;
+      margin-bottom: .4rem;
+    }
+
+    .note-source {
+      display: inline-flex;
+      align-items: center;
+      gap: .3em;
+      font-family: var(--font-mono);
+      font-size: .64rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+    }
+
+    .note-source.from-highlight {
+      color: #5C4A12;
+    }
+
+    .note-source.from-independent {
+      color: var(--chalk);
+    }
+
+    .note-actions {
+      display: flex;
+      gap: .2rem;
+    }
+
+    .note-icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: .8rem;
+      padding: .15rem .3rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color .15s ease, background .15s ease;
+    }
+
+    .note-icon-btn:hover {
+      color: var(--ink);
+      background: var(--paper-3);
+    }
+
+    .note-icon-btn.delete:hover {
+      color: var(--flag);
+    }
+
+    .note-link {
+      font-size: .78rem;
+      font-style: italic;
+      color: var(--muted);
+      border-left: 2px solid var(--line);
+      padding: .1rem 0 .1rem .55rem;
+      margin-bottom: .35rem;
+      cursor: pointer;
+      transition: color .15s ease, border-color .15s ease;
+    }
+
+    .note-link:hover {
+      color: var(--chalk);
+      border-left-color: var(--chalk);
+    }
+
+    .note-text {
+      font-size: .88rem;
+      line-height: 1.55;
+    }
+
+    .note-text[contenteditable="true"] {
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+      background: var(--paper);
+      border-radius: 4px;
+      padding: .3rem .4rem;
+    }
+
+    .notes-empty-global {
+      padding: 2.25rem .5rem;
+      text-align: center;
+      font-size: .88rem;
+      font-style: italic;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .notes-empty-global strong {
+      color: var(--chalk);
+      font-style: normal;
+    }
+
+    /* ===================== RIGHT State 2: option result ===================== */
+    .option-view {
+      animation: fadeInUp .35s ease;
+    }
+
+    .option-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding-bottom: 1rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .option-active-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: .35em .75em;
+      background: var(--chalk);
+      color: var(--paper);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    details.how-it-works {
+      flex: 1;
+      min-width: 220px;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+
+    details.how-it-works summary {
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--chalk);
+    }
+
+    details.how-it-works[open] summary {
+      margin-bottom: .6rem;
+    }
+
+    details.how-it-works p {
+      line-height: 1.55;
+      margin-bottom: .45rem;
     }
 
     .generating {
@@ -452,10 +999,68 @@
       animation-delay: .3s;
     }
 
-    /* Option A — note blocks */
+    .result-card h2 {
+      font-weight: 600;
+      font-size: 1.45rem;
+      margin: .3rem 0 1.1rem;
+    }
+
+    .ai-reasoning-block {
+      background: var(--paper-2);
+      border-left: 3px solid var(--chalk);
+      border-radius: 2px;
+      padding: .8rem 1rem;
+      margin-bottom: 1.2rem;
+      font-size: .88rem;
+      line-height: 1.6;
+    }
+
+    .block-label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--chalk);
+      margin-bottom: .35rem;
+    }
+
+    /* Option A */
+    .mode-toggle {
+      display: flex;
+      gap: .25rem;
+      background: var(--paper-2);
+      padding: .25rem;
+      border-radius: 8px;
+      margin-bottom: 1.2rem;
+    }
+
+    .mode-toggle button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: .79rem;
+      font-weight: 500;
+      padding: .5rem .5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+    }
+
+    .mode-toggle button.active {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .07);
+    }
+
+    .mode-toggle button:hover:not(.active) {
+      color: var(--ink);
+    }
+
     .note-block {
-      margin-bottom: 1.1rem;
-      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+      padding: .95rem 1.05rem;
       background: var(--paper-2);
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -468,16 +1073,45 @@
       cursor: text;
     }
 
+    .note-block-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .6rem;
+      margin-bottom: .5rem;
+    }
+
     .note-block h4 {
       font-family: var(--font-sans);
-      font-size: .85rem;
+      font-size: .88rem;
       font-weight: 600;
-      margin: 0 0 .5rem;
+      margin: 0;
+    }
+
+    .citation-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .3em;
+      font-family: var(--font-mono);
+      font-size: .66rem;
+      background: var(--paper);
+      color: var(--chalk);
+      border: 1px solid var(--line);
+      padding: .2em .55em;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color .15s ease, color .15s ease;
+    }
+
+    .citation-pill:hover {
+      border-color: var(--chalk);
+      color: var(--chalk-dark);
     }
 
     .note-block p,
     .note-block li {
-      font-size: .9rem;
+      font-size: .89rem;
       line-height: 1.6;
       margin: 0 0 .35rem;
     }
@@ -496,17 +1130,41 @@
       border-radius: 4px;
     }
 
+    .guess-marker {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      color: var(--flag);
+      background: var(--flag-bg);
+      border: 1px solid rgba(184, 86, 15, .3);
+      padding: .1em .45em;
+      border-radius: 4px;
+      margin-right: .35em;
+      white-space: nowrap;
+    }
+
+    .refine-link {
+      margin-top: .35rem;
+      font-size: .8rem;
+    }
+
     .disclaimer {
-      font-size: .78rem;
+      font-size: .79rem;
       color: var(--muted);
       font-style: italic;
-      margin: 1rem 0 1.5rem;
+      line-height: 1.6;
+      margin: 1.1rem 0 1.4rem;
+      padding: .7rem .9rem;
+      background: var(--paper-2);
+      border-left: 3px solid var(--flag);
+      border-radius: 2px;
     }
 
     .action-row {
       display: flex;
       gap: .75rem;
       justify-content: flex-end;
+      flex-wrap: wrap;
     }
 
     .save-confirm {
@@ -517,42 +1175,81 @@
       margin-top: .6rem;
     }
 
-    /* Option B — Socratic chat */
-    .ai-reasoning {
-      font-size: .85rem;
+    /* Option B */
+    .transcript-counter {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
       color: var(--muted);
-      font-style: italic;
+      padding: .3em .65em;
+      background: var(--paper-2);
+      border-radius: 999px;
       margin-bottom: 1rem;
+    }
+
+    .why-asking {
+      background: var(--paper-2);
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: .8rem 1rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .why-asking ul {
+      margin: 0;
+      padding-left: 1.15rem;
+      font-size: .85rem;
+      line-height: 1.6;
+    }
+
+    .mental-model {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: .8rem 1rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .mental-model .guess {
+      font-style: italic;
+      font-size: .92rem;
       line-height: 1.55;
+      margin-bottom: .55rem;
     }
 
     .chat-bubble {
       background: var(--paper-2);
       border-radius: 10px;
-      padding: 1rem 1.2rem;
-      margin-bottom: 1rem;
+      padding: .95rem 1.15rem;
+      margin-bottom: .9rem;
       line-height: 1.6;
-      font-size: .95rem;
+      font-size: .93rem;
+      animation: fadeInUp .25s ease both;
     }
 
     .chat-bubble.user {
       background: var(--chalk);
       color: var(--paper);
-      margin-left: 15%;
+      margin-left: 14%;
     }
 
     .chat-bubble.ai {
-      margin-right: 15%;
+      margin-right: 14%;
     }
 
     .reply-row {
       display: flex;
       gap: .6rem;
-      margin-bottom: .75rem;
+      margin-bottom: .7rem;
     }
 
     .reply-row input {
       flex: 1;
+      min-width: 0;
       padding: .7rem .9rem;
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -569,13 +1266,14 @@
 
     .reply-links {
       display: flex;
-      gap: 1.2rem;
+      gap: 1.1rem;
+      flex-wrap: wrap;
       margin-bottom: .5rem;
     }
 
     .quick-replies {
       display: flex;
-      gap: .6rem;
+      gap: .5rem;
       flex-wrap: wrap;
       margin-top: .7rem;
     }
@@ -584,8 +1282,7 @@
       background: var(--paper);
       border: 1px solid var(--chalk);
       color: var(--chalk);
-      font-family: var(--font-sans);
-      font-size: .8rem;
+      font-size: .79rem;
       padding: .4rem .8rem;
       border-radius: 999px;
       cursor: pointer;
@@ -598,66 +1295,234 @@
     }
 
     .chip-btn:disabled {
-      opacity: .45;
+      opacity: .4;
       cursor: default;
     }
 
-    /* Option C — grouping / Lab Coach */
+    .pushback-link {
+      display: inline-block;
+      background: none;
+      border: none;
+      color: var(--flag);
+      font-size: .82rem;
+      font-weight: 500;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: .25rem 0;
+      margin-top: .6rem;
+    }
+
+    /* Option C */
     .stat-row {
       display: flex;
-      gap: .75rem;
+      gap: .7rem;
       flex-wrap: wrap;
-      margin: 1.25rem 0;
+      margin: 1.2rem 0;
     }
 
     .stat-chip {
       flex: 1;
-      min-width: 220px;
+      min-width: 200px;
       background: var(--paper-2);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: .65rem .9rem;
       font-size: .85rem;
+      line-height: 1.5;
     }
 
     .muted {
       color: var(--muted);
       font-size: .85rem;
+      line-height: 1.6;
     }
 
     .lab-coach-view {
       margin-top: 1.1rem;
-      border-top: 1px dashed var(--line);
       padding-top: 1rem;
+      border-top: 1px dashed var(--line);
     }
 
     .cluster {
+      background: var(--paper-2);
+      border-radius: 8px;
+      margin-bottom: .6rem;
+      overflow: hidden;
+    }
+
+    .cluster-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
       gap: .6rem;
-      padding: .85rem 1rem;
-      background: var(--paper-2);
-      border-radius: 8px;
-      margin-bottom: .6rem;
+      padding: .8rem 1rem;
+    }
+
+    .cluster-info {
+      display: flex;
+      flex-direction: column;
+      gap: .12rem;
     }
 
     .cluster-title {
       font-weight: 600;
       font-size: .9rem;
-      display: block;
     }
 
     .cluster-count {
-      font-size: .76rem;
-      color: var(--muted);
       font-family: var(--font-mono);
+      font-size: .72rem;
+      color: var(--muted);
     }
 
     .cluster-actions {
       display: flex;
-      gap: .5rem;
+      gap: .45rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .cluster-toggle {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      padding: .3rem .55rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: border-color .15s ease, color .15s ease;
+    }
+
+    .cluster-toggle:hover {
+      border-color: var(--chalk);
+      color: var(--chalk);
+    }
+
+    .cluster-body {
+      padding: .8rem 1rem .85rem;
+      border-top: 1px dashed var(--line);
+      animation: fadeInUp .2s ease;
+    }
+
+    .cluster-reason {
+      font-size: .84rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: .6rem;
+    }
+
+    .cluster-quote {
+      font-size: .84rem;
+      line-height: 1.55;
+      padding: .45rem .65rem;
+      background: var(--paper);
+      border-left: 2px solid var(--chalk);
+      border-radius: 2px;
+      margin-bottom: .35rem;
+      font-style: italic;
+    }
+
+    .cluster-feedback-label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin: .65rem 0 .3rem;
+    }
+
+    .cluster-feedback {
+      min-height: 58px;
+    }
+
+    .cluster-status {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: .25em .6em;
+      border-radius: 999px;
+    }
+
+    .cluster-status.approved {
+      background: rgba(53, 81, 74, .12);
+      color: var(--chalk);
+    }
+
+    .cluster-status.rejected {
+      background: var(--flag-bg);
+      color: var(--flag);
+    }
+
+    .ambiguous-panel {
+      margin-top: 1.5rem;
+      padding: 1rem 1.1rem 1.1rem;
+      background: var(--paper-2);
+      border: 1px dashed var(--flag);
+      border-radius: 8px;
+    }
+
+    .ambiguous-panel h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: .3rem;
+    }
+
+    .amb-intro {
+      font-size: .82rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: .85rem;
+    }
+
+    .ambiguous-item {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .65rem .8rem;
+      margin-bottom: .55rem;
+    }
+
+    .ambiguous-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .ambiguous-text {
+      font-size: .87rem;
+      font-style: italic;
+      line-height: 1.55;
+      margin-bottom: .55rem;
+    }
+
+    .ambiguous-options {
+      display: flex;
+      gap: .45rem;
+      flex-wrap: wrap;
+    }
+
+    .ambiguous-options button {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .77rem;
+      padding: .32rem .65rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: border-color .15s ease, color .15s ease, background .15s ease;
+    }
+
+    .ambiguous-options button:hover {
+      border-color: var(--chalk);
+      color: var(--chalk);
+    }
+
+    .ambiguous-options button.assigned {
+      background: var(--chalk);
+      border-color: var(--chalk);
+      color: var(--paper);
     }
 
     /* ===================== Facilitator drawer ===================== */
@@ -681,7 +1546,7 @@
       top: 0;
       right: 0;
       height: 100%;
-      width: 340px;
+      width: 360px;
       max-width: 88vw;
       background: var(--ink);
       color: var(--paper);
@@ -708,7 +1573,7 @@
 
     .facilitator-drawer h3 {
       font-family: var(--font-mono);
-      font-size: .8rem;
+      font-size: .78rem;
       text-transform: uppercase;
       letter-spacing: .05em;
       color: var(--highlighter);
@@ -721,7 +1586,7 @@
 
     .facilitator-drawer p {
       font-size: .82rem;
-      line-height: 1.55;
+      line-height: 1.6;
       color: rgba(245, 243, 238, .85);
       margin: 0 0 .55rem;
     }
@@ -742,7 +1607,7 @@
       line-height: 1;
     }
 
-    /* ===================== Motion & responsive ===================== */
+    /* ===================== Motion ===================== */
     @keyframes fadeInUp {
       from {
         opacity: 0;
@@ -770,6 +1635,32 @@
       }
     }
 
+    @keyframes noteFlash {
+
+      0%,
+      100% {
+        background: var(--paper-2);
+        border-color: var(--line);
+      }
+
+      45% {
+        background: rgba(244, 198, 75, .25);
+        border-color: var(--highlighter);
+      }
+    }
+
+    @keyframes pulseHl {
+
+      0%,
+      100% {
+        box-shadow: none;
+      }
+
+      50% {
+        box-shadow: 0 0 0 4px rgba(244, 198, 75, .55);
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
 
       *,
@@ -782,31 +1673,21 @@
       }
     }
 
-    @media (max-width:640px) {
-      .canvas {
-        padding: 1.5rem 1.25rem 2rem;
-        margin: 1.25rem auto 3rem;
-        border-left-width: 2px;
+    /* Narrow laptop fallback: stack panels */
+    @media (max-width: 900px) {
+      .canvas-grid,
+      .canvas-grid[data-view="result"],
+      .canvas-grid[data-collapsed="true"] {
+        grid-template-columns: minmax(0, 1fr);
       }
 
-      .lesson-title {
-        font-size: 1.4rem;
+      .right-panel {
+        position: static;
+        max-height: none;
       }
 
-      .proto-bar {
-        padding: .7rem 1rem;
-      }
-
-      .chat-bubble.user {
-        margin-left: 5%;
-      }
-
-      .chat-bubble.ai {
-        margin-right: 5%;
-      }
-
-      .stat-chip {
-        min-width: 100%;
+      .right-collapse {
+        display: none;
       }
     }
   </style>
@@ -815,345 +1696,1287 @@
 <body>
 
   <!-- ===================== Prototype controls (meta layer, not product UI) ===================== -->
-  <div class="proto-bar" role="toolbar" aria-label="Điều khiển prototype">
+  <div class="proto-bar" role="toolbar" aria-label="Dieu khien prototype">
     <span class="proto-label">Prototype · Common Context</span>
     <div class="proto-controls">
-      <span class="proto-caption">Xem thử:</span>
+      <span class="proto-caption">Xem thử</span>
       <div class="pill-group" role="group" aria-label="Chọn option để xem sau khi hoàn thành bài học">
-        <button type="button" class="pill active" data-option="A" aria-pressed="true">A</button>
-        <button type="button" class="pill" data-option="B" aria-pressed="false">B</button>
-        <button type="button" class="pill" data-option="C" aria-pressed="false">C</button>
+        <button type="button" class="pill active" data-option="A" aria-pressed="true">A<span class="pill-tooltip">A · AI tổng hợp ghi chú cá nhân hóa</span></button>
+        <button type="button" class="pill" data-option="B" aria-pressed="false">B<span class="pill-tooltip">B · AI hỏi ngược kiểu Socratic</span></button>
+        <button type="button" class="pill" data-option="C" aria-pressed="false">C<span class="pill-tooltip">C · AI gom nhóm câu hỏi cho Lab Coach</span></button>
       </div>
-      <button type="button" class="notes-toggle" id="notesToggle">🗒 Ghi chú facilitator</button>
-      <button type="button" class="reset-btn" id="resetBtn">↺ Reset</button>
+      <button type="button" class="notes-toggle" id="notesToggle">Ghi chú facilitator</button>
+      <button type="button" class="reset-btn" id="resetBtn">Reset</button>
     </div>
   </div>
 
   <main class="canvas">
+    <div class="canvas-grid" id="canvasGrid" data-view="notes" data-collapsed="false">
 
-    <!-- ===================== COMMON CONTEXT — giống nhau ở cả 3 option ===================== -->
-    <section id="lessonView" aria-live="polite">
-      <p class="breadcrumb">Machine Learning Cơ bản › Bài 4</p>
-      <h1 class="lesson-title">Gradient Descent — Tối ưu hóa hàm mất mát</h1>
-      <p class="lesson-meta">Bạn đã xem hết nội dung bài học. Đây là những phần bạn đã highlight, ghi chú và đánh dấu
-        "chưa hiểu".</p>
+      <!-- ===================== LEFT: slide deck (COMMON CONTEXT) ===================== -->
+      <section class="slide-panel" aria-labelledby="lessonTitle">
+        <p class="breadcrumb">Machine Learning Cơ bản › Bài 4</p>
+        <h1 class="lesson-title" id="lessonTitle">Gradient Descent — Tối ưu hóa hàm mất mát</h1>
+        <p class="lesson-meta">Bạn đang xem lại bài giảng. Chọn đoạn văn bản để highlight, đánh dấu "chưa hiểu", hoặc thêm ghi chú cho từng slide.</p>
 
-      <article class="slide-card">
-        <p class="eyebrow">Slide 02</p>
-        <h3>Công thức cập nhật trọng số</h3>
-        <p>Thuật toán Gradient Descent cập nhật trọng số theo từng bước nhỏ, ngược hướng gradient của hàm mất mát: <span
-            class="mark formula-text">θ = θ − α·∇J(θ)</span>, trong đó α là learning rate.</p>
-        <div class="tags"><span class="tag tag-highlight">Đã highlight</span></div>
-      </article>
+        <div class="slide-dots" id="slideDots" role="tablist" aria-label="Điều hướng slide"></div>
 
-      <article class="slide-card">
-        <p class="eyebrow">Slide 03</p>
-        <h3>Ảnh hưởng của learning rate</h3>
-        <p>Learning rate (α) quyết định độ lớn của mỗi bước cập nhật. Chọn α phù hợp giúp mô hình hội tụ nhanh và ổn
-          định.</p>
-        <div class="tags"><span class="tag tag-flag">⚠ Chưa hiểu</span></div>
-        <div class="note-callout">
-          <p>"Learning rate quá lớn thì sao? Mình chưa rõ."</p>
+        <div id="slideContent"></div>
+
+        <div class="slide-nav" id="slideNav"></div>
+      </section>
+
+      <!-- ===================== RIGHT: notes (State 1) / option result (State 2) ===================== -->
+      <aside class="right-panel" id="rightPanel">
+        <button type="button" class="right-collapse" id="rightCollapse" aria-label="Thu gọn panel" aria-expanded="true">&laquo;</button>
+
+        <!-- State 1 -->
+        <div class="notes-view" id="notesView">
+          <div class="right-header">
+            <h2>Ghi chú của bạn</h2>
+            <span class="note-count" id="noteCount">0 ghi chú</span>
+          </div>
+          <div class="add-note-row">
+            <button type="button" class="add-note-btn" id="addNoteBtn">+ Thêm ghi chú độc lập</button>
+          </div>
+          <div id="addNoteFormContainer"></div>
+          <div class="notes-list" id="notesList" aria-live="polite"></div>
         </div>
-      </article>
 
-      <article class="slide-card">
-        <p class="eyebrow">Slide 04</p>
-        <h3>Ý nghĩa hình học của gradient</h3>
-        <p>Về mặt hình học, <span class="mark">gradient tại một điểm luôn chỉ theo hướng hàm số tăng nhanh nhất</span>;
-          do đó ta di chuyển ngược hướng gradient để giảm hàm mất mát nhanh nhất.</p>
-        <div class="tags"><span class="tag tag-highlight">Đã highlight</span><span class="tag tag-flag">⚠ Chưa
-            hiểu</span></div>
-        <div class="note-callout">
-          <p>"Hiểu công thức nhưng không hình dung được vì sao gradient chỉ hướng dốc nhất."</p>
+        <!-- State 2 -->
+        <div class="option-view hidden" id="optionView">
+          <div class="option-header">
+            <span class="option-active-chip" id="optionActiveChip">Đang xem: Option A</span>
+            <details class="how-it-works">
+              <summary>Cách option này hoạt động</summary>
+              <div id="howItWorksContent"></div>
+            </details>
+          </div>
+          <div id="optionContent" aria-live="polite"></div>
+          <div class="action-row" style="justify-content:flex-start;margin-top:2rem">
+            <button type="button" class="btn-ghost" id="backToLessonBtn">Quay lại bối cảnh ban đầu</button>
+          </div>
         </div>
-      </article>
 
-      <div class="cta-row">
-        <button type="button" class="btn-primary" id="completeBtn">Hoàn thành bài học →</button>
-      </div>
-    </section>
+        <!-- Collapsed rail -->
+        <div class="right-collapsed-icons" id="collapsedIcons" aria-hidden="true"></div>
+      </aside>
 
-    <!-- ===================== CRITICAL INTERACTION + RESULT — khác nhau theo option ===================== -->
-    <section id="resultView" class="hidden">
-      <div id="resultContent" aria-live="polite"></div>
-      <div class="cta-row back">
-        <button type="button" class="btn-ghost" id="resetInline">↺ Quay lại bối cảnh ban đầu</button>
-      </div>
-    </section>
-
+    </div>
   </main>
 
-  <!-- ===================== Facilitator annotation drawer (ẩn khỏi tester) ===================== -->
+  <!-- ===================== Facilitator annotation drawer (an khoi tester) ===================== -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <aside class="facilitator-drawer" id="facilitatorDrawer" aria-hidden="true" aria-label="Ghi chú facilitator">
-    <button type="button" class="drawer-close" id="drawerClose" aria-label="Đóng ghi chú facilitator">✕</button>
+    <button type="button" class="drawer-close" id="drawerClose" aria-label="Đóng ghi chú facilitator">&#10005;</button>
     <p class="drawer-kicker">Chỉ dành cho facilitator — không hiện cho tester</p>
 
+    <h3>Chung cho cả 3 option</h3>
+    <p><strong>Kỳ vọng:</strong> Tester duyệt qua 3 slide, tương tác với highlight/ghi chú ở panel phải, rồi bấm "Hoàn thành bài học" ở slide cuối.</p>
+    <p><strong>Quan sát:</strong> Tester có tự thêm highlight/ghi chú mới không, hay chỉ đọc fixture có sẵn? Có mở panel ghi chú ra đối chiếu không?</p>
+
     <h3>Option A · Personalized Notes</h3>
-    <p><strong>Kỳ vọng:</strong> Tester đọc bản ghi chú AI tạo, đối chiếu với những gì vừa học, chỉnh sửa nếu thấy chưa
-      đúng trước khi lưu.</p>
-    <p><strong>Quan sát:</strong> Có đọc kỹ phần "Cần chú ý thêm" không, hay bấm Lưu ngay không kiểm tra? Có chỉnh sửa
-      nội dung không?</p>
+    <p><strong>Kỳ vọng:</strong> Tester đọc bản ghi chú AI tạo, đối chiếu với những gì vừa học, chỉnh sửa nếu thấy chưa đúng trước khi lưu.</p>
+    <p><strong>Quan sát:</strong> Có đọc kỹ phần "Cần chú ý thêm" không, hay bấm Lưu ngay không kiểm tra? Có dùng bộ lọc chế độ xem không? Có bấm vào citation để về slide gốc không?</p>
     <p><strong>Không giải thích:</strong> AI tổng hợp ghi chú từ đâu, nếu tester không hỏi.</p>
 
     <h3>Option B · Socratic Tutor</h3>
     <p><strong>Kỳ vọng:</strong> Tester đọc câu hỏi gợi mở, tự suy nghĩ trả lời trước khi bỏ qua hoặc xin gợi ý.</p>
-    <p><strong>Quan sát:</strong> Tester có khó chịu vì AI không đưa đáp án ngay không? Có bấm "Bỏ qua" ngay lập tức
-      không?</p>
+    <p><strong>Quan sát:</strong> Tester có khó chịu vì AI không đưa đáp án ngay không? Có bấm "Bỏ qua" ngay lập tức không? Có dùng "AI hiểu sai mình" khi giả thuyết sai không?</p>
     <p><strong>Không giải thích:</strong> Trước rằng AI sẽ không đưa đáp án trực tiếp.</p>
 
     <h3>Option C · Gom nhóm cho Lab Coach</h3>
     <p><strong>Kỳ vọng:</strong> Tester hiểu câu hỏi của mình sẽ được giải đáp sau, không phải ngay lập tức.</p>
-    <p><strong>Quan sát:</strong> Tester có hụt hẫng vì chưa được giải đáp ngay không? Có mở phần xem trước báo cáo Lab
-      Coach không?</p>
+    <p><strong>Quan sát:</strong> Tester có hụt hẫng vì chưa được giải đáp ngay không? Có mở phần xem trước báo cáo Lab Coach không? Có xử lý phần "câu hỏi khó phân loại" không?</p>
     <p><strong>Không giải thích:</strong> Trước rằng câu hỏi sẽ không được trả lời ngay lập tức.</p>
   </aside>
 
   <script>
     (function () {
-      "use strict";
-      var state = { option: 'A' };
+      'use strict';
 
+      /* ===================== Slide fixture (COMMON CONTEXT - dung chung 100%) ===================== */
+      var SLIDES = [
+        {
+          label: 'Slide 02',
+          title: 'Công thức cập nhật trọng số',
+          segments: [
+            { type: 'text', value: 'Thuật toán Gradient Descent cập nhật trọng số theo từng bước nhỏ, ngược hướng gradient của hàm mất mát: ' },
+            { type: 'mark', id: 'formula', value: 'θ = θ − α·∇J(θ)', mono: true },
+            { type: 'text', value: ', trong đó α là learning rate.' }
+          ]
+        },
+        {
+          label: 'Slide 03',
+          title: 'Ảnh hưởng của learning rate',
+          segments: [
+            { type: 'text', value: 'Learning rate (α) quyết định độ lớn của mỗi bước cập nhật. ' },
+            { type: 'mark', id: 'lr-converge', value: 'Chọn α phù hợp giúp mô hình hội tụ nhanh và ổn định' },
+            { type: 'text', value: '.' }
+          ]
+        },
+        {
+          label: 'Slide 04',
+          title: 'Ý nghĩa hình học của gradient',
+          segments: [
+            { type: 'text', value: 'Về mặt hình học, ' },
+            { type: 'mark', id: 'grad-dir', value: 'gradient tại một điểm luôn chỉ theo hướng hàm số tăng nhanh nhất' },
+            { type: 'text', value: '; do đó ta di chuyển ngược hướng gradient để giảm hàm mất mát nhanh nhất.' }
+          ]
+        }
+      ];
+
+      /* Fixture goc: highlight / "chua hieu" / note co san - khop bang trong common_context.md */
+      var FIXTURE = {
+        highlights: [['formula'], [], ['grad-dir']],
+        unclear: [false, true, true],
+        notes: [
+          { slideIdx: 1, text: 'Learning rate quá lớn thì sao? Mình chưa rõ.', source: 'independent', linkedHighlightId: null },
+          { slideIdx: 2, text: 'Hiểu công thức nhưng không hình dung được vì sao gradient chỉ hướng dốc nhất.', source: 'highlight', linkedHighlightId: 'grad-dir' }
+        ]
+      };
+
+      /* ===================== State ===================== */
+      var state;
+
+      function makeInitialState() {
+        return {
+          currentSlide: 0,
+          highlights: FIXTURE.highlights.map(function (a) { return a.slice(); }),
+          unclear: FIXTURE.unclear.slice(),
+          notes: FIXTURE.notes.map(function (n, i) {
+            return {
+              id: 'fx_' + i,
+              slideIdx: n.slideIdx,
+              text: n.text,
+              source: n.source,
+              linkedHighlightId: n.linkedHighlightId
+            };
+          }),
+          view: 'notes',
+          collapsed: false,
+          option: 'A',
+          editor: null,
+          addingNote: false,
+          socraticTurn: 0
+        };
+      }
+
+      var uid = 0;
+      function nextId() { uid += 1; return 'n_' + uid; }
+
+      /* ===================== DOM refs ===================== */
+      var canvasGrid = document.getElementById('canvasGrid');
+      var slideDots = document.getElementById('slideDots');
+      var slideContent = document.getElementById('slideContent');
+      var slideNav = document.getElementById('slideNav');
+      var rightPanel = document.getElementById('rightPanel');
+      var rightCollapse = document.getElementById('rightCollapse');
+      var notesView = document.getElementById('notesView');
+      var optionView = document.getElementById('optionView');
+      var noteCountEl = document.getElementById('noteCount');
+      var notesList = document.getElementById('notesList');
+      var addNoteBtn = document.getElementById('addNoteBtn');
+      var addNoteFormContainer = document.getElementById('addNoteFormContainer');
+      var optionActiveChip = document.getElementById('optionActiveChip');
+      var optionContent = document.getElementById('optionContent');
+      var howItWorksContent = document.getElementById('howItWorksContent');
+      var collapsedIcons = document.getElementById('collapsedIcons');
+      var backToLessonBtn = document.getElementById('backToLessonBtn');
       var pills = document.querySelectorAll('.pill');
-      var lessonView = document.getElementById('lessonView');
-      var resultView = document.getElementById('resultView');
-      var resultContent = document.getElementById('resultContent');
-      var completeBtn = document.getElementById('completeBtn');
       var resetBtn = document.getElementById('resetBtn');
-      var resetInline = document.getElementById('resetInline');
       var notesToggle = document.getElementById('notesToggle');
       var drawer = document.getElementById('facilitatorDrawer');
       var overlay = document.getElementById('drawerOverlay');
       var drawerClose = document.getElementById('drawerClose');
 
-      /* ---------- Option switcher (prototype control, not product UI) ---------- */
+      /* ===================== Helpers ===================== */
+      function esc(str) {
+        return String(str).replace(/[&<>"']/g, function (c) {
+          if (c === '&') { return '&amp;'; }
+          if (c === '<') { return '&lt;'; }
+          if (c === '>') { return '&gt;'; }
+          if (c === '"') { return '&quot;'; }
+          return '&#39;';
+        });
+      }
+
+      function scrollIntoViewSafe(el, opts) {
+        if (el && typeof el.scrollIntoView === 'function') {
+          try { el.scrollIntoView(opts); } catch (e) { /* non-fatal */ }
+        }
+      }
+
+      function truncate(str, n) {
+        return str.length > n ? str.slice(0, n - 1) + '…' : str;
+      }
+
+      function segmentById(slideIdx, id) {
+        var segs = SLIDES[slideIdx].segments;
+        for (var i = 0; i < segs.length; i += 1) {
+          if (segs[i].type === 'mark' && segs[i].id === id) { return segs[i]; }
+        }
+        return null;
+      }
+
+      function notesForSlide(idx) {
+        return state.notes.filter(function (n) { return n.slideIdx === idx; });
+      }
+
+      function totalHighlights() {
+        return state.highlights.reduce(function (sum, arr) { return sum + arr.length; }, 0);
+      }
+
+      /* ===================== Render: slide dots + counter ===================== */
+      function renderDots() {
+        var html = '';
+        SLIDES.forEach(function (slide, idx) {
+          var cls = 'slide-dot';
+          var marked = state.unclear[idx] || state.highlights[idx].length > 0 || notesForSlide(idx).length > 0;
+          if (marked) { cls += ' has-marker'; }
+          if (idx === state.currentSlide) { cls += ' active'; }
+          html += '<button type="button" class="' + cls + '" role="tab" data-goto="' + idx + '"'
+            + ' aria-selected="' + (idx === state.currentSlide ? 'true' : 'false') + '"'
+            + ' aria-label="' + esc(slide.label) + ' — ' + esc(slide.title) + '"></button>';
+        });
+        html += '<span class="slide-counter">' + (state.currentSlide + 1) + ' / ' + SLIDES.length + '</span>';
+        slideDots.innerHTML = html;
+
+        slideDots.querySelectorAll('[data-goto]').forEach(function (el) {
+          el.addEventListener('click', function () {
+            goToSlide(parseInt(el.getAttribute('data-goto'), 10));
+          });
+        });
+      }
+
+      /* ===================== Render: current slide ===================== */
+      function renderSlide() {
+        var idx = state.currentSlide;
+        var slide = SLIDES[idx];
+        var html = '<article class="slide-card">';
+        html += '<p class="eyebrow">' + esc(slide.label) + '</p>';
+        html += '<h3>' + esc(slide.title) + '</h3>';
+        html += '<p class="slide-body">';
+
+        slide.segments.forEach(function (seg) {
+          if (seg.type === 'text') {
+            html += esc(seg.value);
+            return;
+          }
+          var on = state.highlights[idx].indexOf(seg.id) !== -1;
+          var cls = 'mark-target' + (on ? ' active' : '') + (seg.mono ? ' formula-text' : '');
+          html += '<span class="' + cls + '" data-hl="' + esc(seg.id) + '" role="button" tabindex="0"'
+            + ' aria-pressed="' + (on ? 'true' : 'false') + '"'
+            + ' title="' + (on ? 'Bỏ highlight' : 'Highlight đoạn này') + '">'
+            + esc(seg.value) + '</span>';
+        });
+        html += '</p>';
+        html += '<p class="hl-hint">Bấm vào đoạn văn bản để bật/tắt highlight</p>';
+
+        var tags = [];
+        if (state.highlights[idx].length > 0) { tags.push('<span class="tag tag-highlight">Đã highlight</span>'); }
+        if (state.unclear[idx]) { tags.push('<span class="tag tag-flag">&#9888; Chưa hiểu</span>'); }
+        if (tags.length > 0) { html += '<div class="tags">' + tags.join('') + '</div>'; }
+
+        notesForSlide(idx).forEach(function (n) {
+          html += '<div class="note-callout"><p>' + esc(n.text) + '</p></div>';
+        });
+
+        html += '<div class="slide-actions">';
+        html += '<button type="button" class="slide-action' + (state.unclear[idx] ? ' active' : '') + '" id="unclearBtn"'
+          + ' aria-pressed="' + (state.unclear[idx] ? 'true' : 'false') + '">&#9888; Chưa hiểu</button>';
+        html += '<button type="button" class="slide-action" id="slideNoteBtn">&#9998; Thêm ghi chú</button>';
+        if (state.highlights[idx].length > 0) {
+          html += '<button type="button" class="slide-action" id="hlNoteBtn">&#128204; Ghi chú cho highlight</button>';
+        }
+        html += '</div>';
+
+        if (state.editor && state.editor.slideIdx === idx) {
+          html += renderInlineEditor(state.editor);
+        }
+
+        html += '</article>';
+        slideContent.innerHTML = html;
+        bindSlideEvents();
+      }
+
+      function renderInlineEditor(editor) {
+        var label = 'Ghi chú mới cho ' + SLIDES[editor.slideIdx].label;
+        var placeholder = 'Bạn muốn ghi nhớ hoặc thắc mắc điều gì?';
+        if (editor.mode === 'highlight') {
+          var seg = segmentById(editor.slideIdx, editor.highlightId);
+          label = 'Ghi chú cho đoạn: "' + truncate(seg ? seg.value : '', 48) + '"';
+          placeholder = 'Bạn chưa rõ điều gì ở đoạn này?';
+        }
+        return '<div class="slide-editor">'
+          + '<p class="slide-editor-label">' + esc(label) + '</p>'
+          + '<label class="visually-hidden" for="slideNoteInput">' + esc(label) + '</label>'
+          + '<textarea id="slideNoteInput" placeholder="' + esc(placeholder) + '"></textarea>'
+          + '<div class="slide-editor-actions">'
+          + '<button type="button" class="btn-ghost small" id="slideNoteCancel">Hủy</button>'
+          + '<button type="button" class="btn-primary small" id="slideNoteSave">Lưu ghi chú</button>'
+          + '</div>'
+          + '</div>';
+      }
+
+      function bindSlideEvents() {
+        slideContent.querySelectorAll('[data-hl]').forEach(function (el) {
+          var id = el.getAttribute('data-hl');
+          el.addEventListener('click', function () { toggleHighlight(id); });
+          el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleHighlight(id);
+            }
+          });
+        });
+
+        var unclearBtn = document.getElementById('unclearBtn');
+        if (unclearBtn) { unclearBtn.addEventListener('click', toggleUnclear); }
+
+        var slideNoteBtn = document.getElementById('slideNoteBtn');
+        if (slideNoteBtn) {
+          slideNoteBtn.addEventListener('click', function () { openEditor('independent', null); });
+        }
+
+        var hlNoteBtn = document.getElementById('hlNoteBtn');
+        if (hlNoteBtn) {
+          hlNoteBtn.addEventListener('click', function () {
+            openEditor('highlight', state.highlights[state.currentSlide][0]);
+          });
+        }
+
+        var cancel = document.getElementById('slideNoteCancel');
+        if (cancel) { cancel.addEventListener('click', closeEditor); }
+
+        var save = document.getElementById('slideNoteSave');
+        if (save) { save.addEventListener('click', saveEditorNote); }
+
+        var input = document.getElementById('slideNoteInput');
+        if (input) {
+          input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { closeEditor(); }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { saveEditorNote(); }
+          });
+          input.focus();
+        }
+      }
+
+      /* ===================== Render: slide nav (last Next = trigger) ===================== */
+      function renderNav() {
+        var isLast = state.currentSlide === SLIDES.length - 1;
+        var html = '<button type="button" class="btn-ghost" id="prevSlideBtn"'
+          + (state.currentSlide === 0 ? ' disabled' : '') + '>&#9664; Slide trước</button>';
+        if (isLast) {
+          html += '<button type="button" class="btn-primary" id="completeBtn">Hoàn thành bài học &#8594;</button>';
+        } else {
+          html += '<button type="button" class="btn-primary" id="nextSlideBtn">Slide tiếp &#9654;</button>';
+        }
+        slideNav.innerHTML = html;
+
+        var prev = document.getElementById('prevSlideBtn');
+        if (prev) { prev.addEventListener('click', function () { goToSlide(state.currentSlide - 1); }); }
+        var next = document.getElementById('nextSlideBtn');
+        if (next) { next.addEventListener('click', function () { goToSlide(state.currentSlide + 1); }); }
+        var complete = document.getElementById('completeBtn');
+        if (complete) { complete.addEventListener('click', completeLesson); }
+      }
+
+      /* ===================== Render: notes panel (State 1) ===================== */
+      function renderNotes() {
+        var total = state.notes.length;
+        noteCountEl.textContent = total + ' ghi chú';
+
+        if (total === 0) {
+          notesList.innerHTML = '<div class="notes-empty-global">Bạn chưa có ghi chú nào.<br>'
+            + 'Bấm vào <strong>văn bản trong slide</strong> để highlight, hoặc dùng '
+            + '<strong>Thêm ghi chú</strong> ở dưới mỗi slide.</div>';
+          return;
+        }
+
+        var html = '';
+        SLIDES.forEach(function (slide, idx) {
+          var slideNotes = notesForSlide(idx);
+          html += '<div class="note-section">';
+          html += '<div class="note-section-header">'
+            + '<span class="note-section-title">' + esc(slide.label) + ' — ' + esc(slide.title) + '</span>'
+            + '<span class="count">' + slideNotes.length + '</span>'
+            + '</div>';
+          if (slideNotes.length === 0) {
+            html += '<p class="note-section-empty">Chưa có ghi chú cho phần này.</p>';
+          } else {
+            slideNotes.forEach(function (n) { html += renderNoteCard(n); });
+          }
+          html += '</div>';
+        });
+        notesList.innerHTML = html;
+        bindNoteCards();
+      }
+
+      function renderNoteCard(note) {
+        var srcCls = note.source === 'highlight' ? 'from-highlight' : 'from-independent';
+        var srcText = note.source === 'highlight' ? '&#128204; Từ highlight' : '&#9998; Ghi chú độc lập';
+
+        var link = '';
+        if (note.linkedHighlightId) {
+          var seg = segmentById(note.slideIdx, note.linkedHighlightId);
+          if (seg) {
+            link = '<div class="note-link" data-jump-slide="' + note.slideIdx + '"'
+              + ' data-jump-hl="' + esc(note.linkedHighlightId) + '"'
+              + ' title="Về đoạn gốc trong slide">"' + esc(truncate(seg.value, 58)) + '"</div>';
+          }
+        }
+
+        return '<div class="note-card" data-note-id="' + esc(note.id) + '">'
+          + '<div class="note-card-head">'
+          + '<span class="note-source ' + srcCls + '">' + srcText + '</span>'
+          + '<div class="note-actions">'
+          + '<button type="button" class="note-icon-btn edit" aria-label="Chỉnh sửa ghi chú">&#9998;</button>'
+          + '<button type="button" class="note-icon-btn delete" aria-label="Xóa ghi chú">&#128465;</button>'
+          + '</div>'
+          + '</div>'
+          + link
+          + '<div class="note-text">' + esc(note.text) + '</div>'
+          + '</div>';
+      }
+
+      function bindNoteCards() {
+        notesList.querySelectorAll('.note-card').forEach(function (card) {
+          var id = card.getAttribute('data-note-id');
+          card.querySelector('.edit').addEventListener('click', function () { toggleNoteEdit(id, card); });
+          card.querySelector('.delete').addEventListener('click', function () { deleteNote(id); });
+
+          var link = card.querySelector('.note-link');
+          if (link) {
+            link.addEventListener('click', function () {
+              jumpToHighlight(parseInt(link.getAttribute('data-jump-slide'), 10), link.getAttribute('data-jump-hl'));
+            });
+          }
+        });
+      }
+
+      function readEditableText(el) {
+        var raw = typeof el.innerText === 'string' ? el.innerText : el.textContent;
+        return String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+      }
+
+      function toggleNoteEdit(id, card) {
+        var textEl = card.querySelector('.note-text');
+        var editBtn = card.querySelector('.edit');
+        var editing = textEl.getAttribute('contenteditable') === 'true';
+
+        if (editing) {
+          var newText = readEditableText(textEl);
+          var note = findNote(id);
+          if (note && newText) { note.text = newText; }
+          renderAll();
+          return;
+        }
+
+        textEl.setAttribute('contenteditable', 'true');
+        editBtn.innerHTML = '&#10003;';
+        editBtn.setAttribute('aria-label', 'Lưu ghi chú');
+        textEl.focus();
+        var range = document.createRange();
+        range.selectNodeContents(textEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        textEl.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            toggleNoteEdit(id, card);
+          }
+          if (e.key === 'Escape') { renderAll(); }
+        });
+      }
+
+      function findNote(id) {
+        for (var i = 0; i < state.notes.length; i += 1) {
+          if (state.notes[i].id === id) { return state.notes[i]; }
+        }
+        return null;
+      }
+
+      function deleteNote(id) {
+        state.notes = state.notes.filter(function (n) { return n.id !== id; });
+        renderAll();
+      }
+
+      /* ===================== Render: add-note form ===================== */
+      function renderAddNoteForm() {
+        if (!state.addingNote) {
+          addNoteFormContainer.innerHTML = '';
+          addNoteBtn.textContent = '+ Thêm ghi chú độc lập';
+          return;
+        }
+        addNoteBtn.textContent = 'Đóng form';
+
+        var opts = '';
+        SLIDES.forEach(function (slide, idx) {
+          var selected = idx === state.currentSlide ? ' selected' : '';
+          opts += '<option value="' + idx + '"' + selected + '>' + esc(slide.label) + ' — ' + esc(slide.title) + '</option>';
+        });
+
+        addNoteFormContainer.innerHTML = '<div class="add-note-form">'
+          + '<label for="addNoteSlide">Gắn vào slide</label>'
+          + '<select id="addNoteSlide">' + opts + '</select>'
+          + '<label for="addNoteText">Nội dung ghi chú</label>'
+          + '<textarea id="addNoteText" placeholder="Ví dụ: α nhỏ quá thì mất bao lâu để hội tụ?"></textarea>'
+          + '<div class="add-note-form-actions">'
+          + '<button type="button" class="btn-ghost small" id="addNoteCancel">Hủy</button>'
+          + '<button type="button" class="btn-primary small" id="addNoteSave">Lưu</button>'
+          + '</div>'
+          + '</div>';
+
+        document.getElementById('addNoteCancel').addEventListener('click', function () {
+          state.addingNote = false;
+          renderAddNoteForm();
+        });
+        document.getElementById('addNoteSave').addEventListener('click', saveAddNoteForm);
+
+        var ta = document.getElementById('addNoteText');
+        ta.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { saveAddNoteForm(); }
+          if (e.key === 'Escape') {
+            state.addingNote = false;
+            renderAddNoteForm();
+          }
+        });
+        ta.focus();
+      }
+
+      function saveAddNoteForm() {
+        var slideIdx = parseInt(document.getElementById('addNoteSlide').value, 10);
+        var text = document.getElementById('addNoteText').value.trim();
+        if (!text) { return; }
+        var id = nextId();
+        state.notes.push({
+          id: id,
+          slideIdx: slideIdx,
+          text: text,
+          source: 'independent',
+          linkedHighlightId: null
+        });
+        state.addingNote = false;
+        renderAll();
+        flashNote(id);
+      }
+
+      function flashNote(id) {
+        var card = notesList.querySelector('[data-note-id="' + id + '"]');
+        if (!card) { return; }
+        card.classList.add('flash');
+        scrollIntoViewSafe(card, { behavior: 'smooth', block: 'nearest' });
+        setTimeout(function () { card.classList.remove('flash'); }, 1000);
+      }
+
+      /* ===================== Render: collapsed rail ===================== */
+      function renderCollapsedRail() {
+        var noteN = state.notes.length;
+        var unclearN = state.unclear.filter(Boolean).length;
+        var hlN = totalHighlights();
+        collapsedIcons.innerHTML = ''
+          + railIcon('&#9998;', noteN, 'ghi chú')
+          + railIcon('&#9888;', unclearN, 'điểm chưa hiểu')
+          + railIcon('&#128396;', hlN, 'highlight');
+      }
+
+      function railIcon(glyph, count, label) {
+        var badge = count > 0 ? '<span class="badge">' + count + '</span>' : '';
+        return '<span class="rail-icon" title="' + count + ' ' + label + '">' + glyph + badge + '</span>';
+      }
+
+      /* ===================== Master render ===================== */
+      function renderAll() {
+        canvasGrid.setAttribute('data-view', state.view);
+        canvasGrid.setAttribute('data-collapsed', state.collapsed ? 'true' : 'false');
+
+        if (state.view === 'notes') {
+          notesView.classList.remove('hidden');
+          optionView.classList.add('hidden');
+        } else {
+          notesView.classList.add('hidden');
+          optionView.classList.remove('hidden');
+        }
+
+        rightCollapse.innerHTML = state.collapsed ? '&raquo;' : '&laquo;';
+        rightCollapse.setAttribute('aria-label', state.collapsed ? 'Mở rộng panel' : 'Thu gọn panel');
+        rightCollapse.setAttribute('aria-expanded', state.collapsed ? 'false' : 'true');
+
+        pills.forEach(function (p) {
+          var on = p.getAttribute('data-option') === state.option;
+          p.classList.toggle('active', on);
+          p.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+
+        renderDots();
+        renderSlide();
+        renderNav();
+        renderNotes();
+        renderAddNoteForm();
+        renderCollapsedRail();
+      }
+
+      /* ===================== State mutations ===================== */
+      function goToSlide(idx) {
+        if (idx < 0 || idx >= SLIDES.length) { return; }
+        state.currentSlide = idx;
+        state.editor = null;
+        renderAll();
+      }
+
+      function toggleHighlight(id) {
+        var arr = state.highlights[state.currentSlide];
+        var pos = arr.indexOf(id);
+        if (pos === -1) { arr.push(id); } else { arr.splice(pos, 1); }
+        renderAll();
+      }
+
+      function toggleUnclear() {
+        state.unclear[state.currentSlide] = !state.unclear[state.currentSlide];
+        renderAll();
+      }
+
+      function openEditor(mode, highlightId) {
+        state.editor = { slideIdx: state.currentSlide, mode: mode, highlightId: highlightId || null };
+        renderAll();
+      }
+
+      function closeEditor() {
+        state.editor = null;
+        renderAll();
+      }
+
+      function saveEditorNote() {
+        var input = document.getElementById('slideNoteInput');
+        if (!input || !state.editor) { return; }
+        var text = input.value.trim();
+        if (!text) { return; }
+        var id = nextId();
+        state.notes.push({
+          id: id,
+          slideIdx: state.editor.slideIdx,
+          text: text,
+          source: state.editor.mode,
+          linkedHighlightId: state.editor.highlightId
+        });
+        state.editor = null;
+        renderAll();
+        flashNote(id);
+      }
+
+      function jumpToHighlight(slideIdx, hlId) {
+        goToSlide(slideIdx);
+        var el = slideContent.querySelector('[data-hl="' + hlId + '"]');
+        if (!el) { return; }
+        scrollIntoViewSafe(el, { behavior: 'smooth', block: 'center' });
+        el.classList.add('pulse');
+        setTimeout(function () { el.classList.remove('pulse'); }, 900);
+      }
+
+      function completeLesson() {
+        state.view = 'result';
+        state.collapsed = false;
+        state.socraticTurn = 0;
+        renderAll();
+        renderOption();
+        rightPanel.scrollTop = 0;
+      }
+
+      function backToLesson() {
+        state.view = 'notes';
+        renderAll();
+      }
+
+      function toggleCollapse() {
+        state.collapsed = !state.collapsed;
+        renderAll();
+        if (state.view === 'result' && !state.collapsed) { renderOption(); }
+      }
+
+      function resetAll() {
+        state = makeInitialState();
+        renderAll();
+      }
+
+      /* ===================== Option metadata (capability / limit) ===================== */
+      var OPTION_META = {
+        A: {
+          howItWorks: '<p><strong>AI làm gì:</strong> tổng hợp highlight, điểm "chưa hiểu" và ghi chú của bạn thành một bản ghi chú cá nhân hóa, có dẫn nguồn về từng slide.</p>'
+            + '<p><strong>Giới hạn:</strong> AI chỉ tổng hợp trong phạm vi bài giảng này. Những chỗ AI suy đoán được đánh dấu <span class="guess-marker">&asymp; đoán</span> — bạn nên kiểm tra và sửa trước khi lưu.</p>',
+          scaffold: 'Bản ghi chú của bạn'
+        },
+        B: {
+          howItWorks: '<p><strong>AI làm gì:</strong> dựa trên highlight, ghi chú và câu trả lời trước đó để đặt câu hỏi gợi mở phù hợp với cách bạn đang hiểu bài.</p>'
+            + '<p><strong>Giới hạn:</strong> AI không đưa đáp án trực tiếp. AI ghi nhớ các khúc mắc trước để cá nhân hóa cách hỏi, nhưng đó chỉ là suy luận và có thể hiểu sai — dùng "AI hiểu sai mình" để chỉnh lại.</p>',
+          scaffold: 'Câu hỏi gợi mở'
+        },
+        C: {
+          howItWorks: '<p><strong>AI làm gì:</strong> đọc khúc mắc của toàn lớp, nhóm những lỗi tư duy giống nhau và đề xuất nội dung cho một buổi Q&amp;A 15 phút với Lab Coach.</p>'
+            + '<p><strong>Giới hạn:</strong> AI chỉ phân loại, không trả lời. Chất lượng nhóm phụ thuộc vào chất lượng ghi chú — các câu khó phân loại được đưa ra để bạn tự quyết.</p>',
+          scaffold: 'Câu hỏi của bạn đã được nhóm lại'
+        }
+      };
+
+      /* ===================== Option render orchestration ===================== */
+      function renderOption() {
+        optionActiveChip.textContent = 'Đang xem: Option ' + state.option;
+        howItWorksContent.innerHTML = OPTION_META[state.option].howItWorks;
+
+        optionContent.innerHTML = '<div class="generating">'
+          + '<span class="dots"><span></span><span></span><span></span></span> Đang xử lý…</div>';
+
+        // NOTE: real implementation se goi API o day thay vi setTimeout.
+        var opt = state.option;
+        setTimeout(function () {
+          if (state.view !== 'result' || state.option !== opt) { return; }
+          if (opt === 'A') { optionContent.innerHTML = templateA(); }
+          else if (opt === 'B') { optionContent.innerHTML = templateB(); }
+          else { optionContent.innerHTML = templateC(); }
+          bindOptionHandlers(opt);
+        }, 550);
+      }
+
+      /* ===================== Option A: Personalized Notes ===================== */
+      function templateA() {
+        var hlN = totalHighlights();
+        var unclearN = state.unclear.filter(Boolean).length;
+        var noteN = state.notes.length;
+
+        return '<div class="result-card">'
+          + '<p class="eyebrow">Ghi chú cá nhân hóa</p>'
+          + '<h2>Bản ghi chú của bạn</h2>'
+
+          + '<div class="ai-reasoning-block">'
+          + '<span class="block-label">AI đã tổng hợp từ</span>'
+          + SLIDES.length + ' slide bạn vừa xem · ' + hlN + ' đoạn highlight · '
+          + unclearN + ' điểm đánh dấu "chưa hiểu" · ' + noteN + ' ghi chú bạn viết.'
+          + '</div>'
+
+          + '<div class="mode-toggle" role="group" aria-label="Chế độ xem ghi chú">'
+          + '<button type="button" class="active" data-mode="all">Tóm tắt toàn bài</button>'
+          + '<button type="button" data-mode="unclear">Chỉ điểm chưa hiểu</button>'
+          + '<button type="button" data-mode="mastered">Chỉ điểm đã nắm</button>'
+          + '</div>'
+
+          + '<div class="note-block" data-modes="all">'
+          + '<div class="note-block-head"><h4>Tóm tắt</h4>'
+          + '<button type="button" class="citation-pill" data-cite-slide="0" data-cite-hl="formula">Slide 02</button></div>'
+          + '<p>Gradient Descent cập nhật trọng số theo hướng ngược gradient để giảm dần hàm mất mát; '
+          + 'learning rate α quyết định độ lớn mỗi bước.</p>'
+          + '</div>'
+
+          + '<div class="note-block" data-modes="all,mastered">'
+          + '<div class="note-block-head"><h4>Bạn đã nắm vững</h4>'
+          + '<button type="button" class="citation-pill" data-cite-slide="0" data-cite-hl="formula">Slide 02</button></div>'
+          + '<ul><li>Công thức cập nhật trọng số <span class="formula-chip">θ = θ − α·∇J(θ)</span> — bạn đã highlight đoạn này và không đánh dấu "chưa hiểu".</li></ul>'
+          + '</div>'
+
+          + '<div class="note-block" data-modes="all,unclear">'
+          + '<div class="note-block-head"><h4>Cần chú ý thêm — learning rate</h4>'
+          + '<button type="button" class="citation-pill" data-cite-slide="1" data-cite-hl="lr-converge">Slide 03</button></div>'
+          + '<ul><li>Bạn đã hỏi: <em>"Learning rate quá lớn thì sao? Mình chưa rõ."</em> '
+          + 'Điểm cần nắm: α quá lớn làm bước cập nhật vượt qua điểm cực tiểu, loss dao động hoặc phân kỳ.</li></ul>'
+          + '<button type="button" class="link-btn refine-link" data-refine="lr">Chỗ này chưa đúng ý mình — chỉnh lại</button>'
+          + '</div>'
+
+          + '<div class="note-block" data-modes="all,unclear">'
+          + '<div class="note-block-head"><h4><span class="guess-marker">&asymp; đoán</span>Ý nghĩa hình học của gradient</h4>'
+          + '<button type="button" class="citation-pill" data-cite-slide="2" data-cite-hl="grad-dir">Slide 04</button></div>'
+          + '<ul><li>Bạn ghi: <em>"Hiểu công thức nhưng không hình dung được vì sao gradient chỉ hướng dốc nhất."</em></li>'
+          + '<li>AI <strong>đoán</strong> bạn đang thiếu liên hệ giữa đạo hàm riêng từng chiều và vector tổng hợp — '
+          + 'chưa chắc đây đúng là chỗ vướng của bạn.</li></ul>'
+          + '<button type="button" class="link-btn refine-link" data-refine="geo">Chỗ này chưa đúng ý mình — chỉnh lại</button>'
+          + '</div>'
+
+          + '<div id="refineBox"></div>'
+
+          + '<p class="disclaimer">Ghi chú do AI tổng hợp từ nội dung bài và các đánh dấu của bạn — '
+          + 'có thể chưa chính xác, đặc biệt ở phần đánh dấu <span class="guess-marker">&asymp; đoán</span>. '
+          + 'Hãy kiểm tra lại trước khi lưu.</p>'
+
+          + '<div class="action-row">'
+          + '<button type="button" class="btn-ghost" id="editNoteBtn" data-editing="false">Chỉnh sửa</button>'
+          + '<button type="button" class="btn-primary" id="saveNoteBtn">Xác nhận &amp; Lưu</button>'
+          + '</div>'
+          + '<p class="save-confirm hidden" id="saveConfirm">Đã lưu ghi chú</p>'
+          + '</div>';
+      }
+
+      /* ===================== Option B: Socratic Tutor ===================== */
+      function templateB() {
+        return '<div class="result-card">'
+          + '<p class="eyebrow">Câu hỏi gợi mở</p>'
+          + '<h2>Cùng nghĩ lại một chút</h2>'
+          + '<span class="transcript-counter" id="transcriptCounter">Lượt ' + (state.socraticTurn + 1) + '</span>'
+
+          + '<div class="why-asking">'
+          + '<span class="block-label">Vì sao AI hỏi câu này</span>'
+          + '<ul>'
+          + '<li>Bạn <strong>đã nắm</strong> công thức cập nhật trọng số (Slide 02 — đã highlight, không đánh dấu chưa hiểu).</li>'
+          + '<li>Bạn <strong>còn vướng</strong> ý nghĩa hình học của gradient (Slide 04 — có ghi chú "chưa hình dung được").</li>'
+          + '<li>Nên AI hỏi về trực giác hình học, không nhắc lại công thức.</li>'
+          + '</ul>'
+          + '</div>'
+
+          + '<div class="mental-model">'
+          + '<span class="block-label">AI đang đoán rằng bạn nghĩ</span>'
+          + '<p class="guess">"Gradient là một mũi tên có sẵn, chỉ về phía chân đồi."</p>'
+          + '<div class="quick-replies" id="mmReplies">'
+          + '<button type="button" class="chip-btn" data-mm="yes">Đúng, mình nghĩ vậy</button>'
+          + '<button type="button" class="chip-btn" data-mm="no">Chưa đúng lắm</button>'
+          + '</div>'
+          + '</div>'
+
+          + '<div class="chat-bubble ai" id="mainQuestion">Nếu bạn đứng trên một ngọn đồi trong sương mù và chỉ cảm nhận được độ nghiêng ngay dưới chân, '
+          + 'bạn sẽ chọn hướng bước tiếp theo như thế nào? Hướng đó liên quan gì tới gradient?</div>'
+
+          + '<div id="socraticFollowup"></div>'
+
+          + '<div class="reply-row">'
+          + '<label for="socraticInput" class="visually-hidden">Trả lời câu hỏi</label>'
+          + '<input type="text" id="socraticInput" placeholder="Trả lời theo cách bạn hiểu…">'
+          + '<button type="button" class="btn-primary" id="socraticSend">Gửi</button>'
+          + '</div>'
+          + '<div class="reply-links">'
+          + '<button type="button" class="link-btn" id="hintBtn">Xin gợi ý</button>'
+          + '<button type="button" class="link-btn" id="skipBtn">Bỏ qua câu hỏi này</button>'
+          + '</div>'
+          + '<button type="button" class="pushback-link" id="pushbackBtn">AI hiểu sai mình — đặt lại câu hỏi khác</button>'
+          + '</div>';
+      }
+
+      /* ===================== Option C: Lab Coach grouping ===================== */
+      var CLUSTERS = [
+        {
+          id: 'lr',
+          title: 'Learning rate quá lớn',
+          count: 9,
+          reason: 'Cả 9 ghi chú đều mô tả cùng một hiện tượng: bước cập nhật vượt qua điểm cực tiểu khi α lớn — '
+            + 'loss dao động hoặc phân kỳ thay vì giảm dần.',
+          quotes: [
+            'Learning rate quá lớn thì sao? Mình chưa rõ. (ghi chú của bạn)',
+            'Nếu α = 0.5 thì θ có nhảy qua điểm cực tiểu luôn không?',
+            'Loss của em lúc tăng lúc giảm, không hiểu tại sao.'
+          ]
+        },
+        {
+          id: 'geo',
+          title: 'Ý nghĩa hình học của gradient',
+          count: 6,
+          reason: 'Cả 6 ghi chú hỏi về trực giác hình học chứ không phải cách tính: hiểu công thức nhưng '
+            + 'không hình dung được vì sao vector gradient lại chỉ hướng dốc nhất.',
+          quotes: [
+            'Hiểu công thức nhưng không hình dung được vì sao gradient chỉ hướng dốc nhất. (ghi chú của bạn)',
+            'Gradient là vector nhiều chiều, sao lại nói nó "chỉ một hướng"?',
+            'Đạo hàm riêng từng biến thì liên quan gì tới hướng dốc nhất?'
+          ]
+        }
+      ];
+
+      var AMBIGUOUS = [
+        {
+          id: 'amb1',
+          text: 'Adam optimizer có dùng gradient descent không? Khác gì standard GD?',
+          why: 'Câu này nhắc tới learning rate thích ứng nhưng cũng có thể là chủ đề riêng ngoài bài.'
+        },
+        {
+          id: 'amb2',
+          text: 'Khi nào dùng batch gradient descent thay vì stochastic?',
+          why: 'Không rõ người hỏi vướng ở kích thước bước hay ở cách chọn dữ liệu mỗi vòng.'
+        }
+      ];
+
+      function templateC() {
+        var yourNotes = state.notes.length;
+        var html = '<div class="result-card">'
+          + '<p class="eyebrow">Đã ghi nhận</p>'
+          + '<h2>Câu hỏi của bạn đã được nhóm lại</h2>'
+
+          + '<div class="ai-reasoning-block">'
+          + '<span class="block-label">AI đang làm gì</span>'
+          + 'Đọc ' + yourNotes + ' ghi chú của bạn cùng khúc mắc của cả lớp, nhóm những chỗ vướng giống nhau '
+          + 'để Lab Coach giải đáp chung trong một buổi Q&amp;A 15 phút.'
+          + '</div>'
+
+          + '<p>Ghi chú của bạn về <strong>learning rate</strong> và <strong>ý nghĩa hình học của gradient</strong> '
+          + 'đã được gộp với các học viên có cùng khúc mắc.</p>'
+
+          + '<div class="stat-row">'
+          + '<div class="stat-chip">9 học viên khác cũng thắc mắc về <strong>learning rate</strong></div>'
+          + '<div class="stat-chip">6 học viên khác vướng <strong>ý nghĩa hình học của gradient</strong></div>'
+          + '</div>'
+
+          + '<p class="muted">Lab Coach sẽ tổ chức buổi Q&amp;A 15 phút sau bài giảng. '
+          + 'Câu hỏi của bạn không được trả lời ngay tại đây.</p>'
+
+          + '<button type="button" class="link-btn" id="toggleLabCoach">Xem trước báo cáo dành cho Lab Coach (demo)</button>'
+          + '<div id="labCoachView" class="lab-coach-view hidden">';
+
+        CLUSTERS.forEach(function (c) {
+          html += '<div class="cluster" data-cluster="' + c.id + '">'
+            + '<div class="cluster-head">'
+            + '<div class="cluster-info">'
+            + '<span class="cluster-title">' + esc(c.title) + '</span>'
+            + '<span class="cluster-count">' + c.count + ' học viên</span>'
+            + '</div>'
+            + '<div class="cluster-actions">'
+            + '<span class="cluster-status hidden" data-status></span>'
+            + '<button type="button" class="cluster-toggle" data-cluster-toggle>Gom vì&hellip;</button>'
+            + '<button type="button" class="btn-ghost small" data-decide="reject">Từ chối</button>'
+            + '<button type="button" class="btn-primary small" data-decide="approve">Chấp thuận</button>'
+            + '</div>'
+            + '</div>'
+            + '<div class="cluster-body hidden">'
+            + '<p class="cluster-reason"><strong>Gom vì:</strong> ' + esc(c.reason) + '</p>';
+
+          c.quotes.forEach(function (q) {
+            html += '<div class="cluster-quote">"' + esc(q) + '"</div>';
+          });
+
+          html += '<label class="cluster-feedback-label" for="fb_' + c.id + '">Ghi chú gửi Lab Coach (tuỳ chọn)</label>'
+            + '<textarea class="cluster-feedback" id="fb_' + c.id + '" placeholder="Ví dụ: nên demo bằng đồ thị loss thay vì công thức."></textarea>'
+            + '</div>'
+            + '</div>';
+        });
+
+        html += '<div class="ambiguous-panel">'
+          + '<h3>Câu hỏi khó phân loại</h3>'
+          + '<p class="amb-intro">AI không chắc những câu này thuộc nhóm nào. Bạn muốn xếp vào đâu?</p>';
+
+        AMBIGUOUS.forEach(function (a) {
+          html += '<div class="ambiguous-item">'
+            + '<p class="ambiguous-text">"' + esc(a.text) + '"</p>'
+            + '<p class="amb-intro" style="margin-bottom:.5rem">' + esc(a.why) + '</p>'
+            + '<div class="ambiguous-options">'
+            + '<button type="button" data-assign="lr">Nhóm: Learning rate</button>'
+            + '<button type="button" data-assign="geo">Nhóm: Ý nghĩa hình học</button>'
+            + '<button type="button" data-assign="new">Tạo nhóm mới</button>'
+            + '<button type="button" data-assign="skip">Bỏ qua kỳ này</button>'
+            + '</div>'
+            + '</div>';
+        });
+
+        html += '</div>'
+          + '</div>'
+          + '</div>';
+        return html;
+      }
+
+      /* ===================== Per-option interaction wiring ===================== */
+      function bindOptionHandlers(opt) {
+        if (opt === 'A') { bindOptionA(); }
+        if (opt === 'B') { bindOptionB(); }
+        if (opt === 'C') { bindOptionC(); }
+      }
+
+      function bindOptionA() {
+        var modeBtns = optionContent.querySelectorAll('.mode-toggle button');
+        var blocks = optionContent.querySelectorAll('.note-block');
+
+        function applyMode(mode) {
+          blocks.forEach(function (b) {
+            var modes = (b.getAttribute('data-modes') || '').split(',');
+            b.classList.toggle('hidden', modes.indexOf(mode) === -1);
+          });
+        }
+
+        modeBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            modeBtns.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            applyMode(btn.getAttribute('data-mode'));
+          });
+        });
+
+        optionContent.querySelectorAll('[data-cite-slide]').forEach(function (pill) {
+          pill.addEventListener('click', function () {
+            var slideIdx = parseInt(pill.getAttribute('data-cite-slide'), 10);
+            jumpToHighlight(slideIdx, pill.getAttribute('data-cite-hl'));
+          });
+        });
+
+        var refineBox = document.getElementById('refineBox');
+        optionContent.querySelectorAll('[data-refine]').forEach(function (link) {
+          link.addEventListener('click', function () {
+            refineBox.innerHTML = '<div class="slide-editor">'
+              + '<p class="slide-editor-label">Nói cho AI biết chỗ nào chưa đúng</p>'
+              + '<label class="visually-hidden" for="refineInput">Mô tả chỗ chưa đúng</label>'
+              + '<textarea id="refineInput" placeholder="Ví dụ: mình vướng ở chỗ khác, không phải đạo hàm riêng…"></textarea>'
+              + '<div class="slide-editor-actions">'
+              + '<button type="button" class="btn-ghost small" id="refineCancel">Hủy</button>'
+              + '<button type="button" class="btn-primary small" id="refineSend">Gửi cho AI</button>'
+              + '</div>'
+              + '</div>';
+            var ta = document.getElementById('refineInput');
+            ta.focus();
+            document.getElementById('refineCancel').addEventListener('click', function () {
+              refineBox.innerHTML = '';
+            });
+            document.getElementById('refineSend').addEventListener('click', function () {
+              var val = ta.value.trim();
+              if (!val) { return; }
+              refineBox.innerHTML = '<div class="ai-reasoning-block">'
+                + '<span class="block-label">AI đã ghi nhận</span>'
+                + 'Đã cập nhật phần này theo mô tả của bạn: "' + esc(truncate(val, 90)) + '". '
+                + 'Bản ghi chú sẽ được tạo lại quanh chỗ vướng thật của bạn.'
+                + '</div>';
+            });
+          });
+        });
+
+        var editBtn = document.getElementById('editNoteBtn');
+        var saveBtn = document.getElementById('saveNoteBtn');
+        var confirmMsg = document.getElementById('saveConfirm');
+
+        editBtn.addEventListener('click', function () {
+          var editing = editBtn.getAttribute('data-editing') === 'true';
+          blocks.forEach(function (b) {
+            b.contentEditable = (!editing).toString();
+            b.classList.toggle('editing', !editing);
+          });
+          editBtn.textContent = editing ? 'Chỉnh sửa' : 'Xong';
+          editBtn.setAttribute('data-editing', (!editing).toString());
+        });
+
+        saveBtn.addEventListener('click', function () {
+          blocks.forEach(function (b) {
+            b.contentEditable = 'false';
+            b.classList.remove('editing');
+          });
+          editBtn.textContent = 'Chỉnh sửa';
+          editBtn.setAttribute('data-editing', 'false');
+          confirmMsg.classList.remove('hidden');
+          setTimeout(function () { confirmMsg.classList.add('hidden'); }, 2500);
+        });
+      }
+
+      function bindOptionB() {
+        var input = document.getElementById('socraticInput');
+        var sendBtn = document.getElementById('socraticSend');
+        var followup = document.getElementById('socraticFollowup');
+        var hintBtn = document.getElementById('hintBtn');
+        var skipBtn = document.getElementById('skipBtn');
+        var pushbackBtn = document.getElementById('pushbackBtn');
+        var counter = document.getElementById('transcriptCounter');
+        var mmReplies = document.getElementById('mmReplies');
+
+        function bumpTurn() {
+          state.socraticTurn += 1;
+          counter.textContent = 'Lượt ' + (state.socraticTurn + 1);
+        }
+
+        function addBubble(role, html) {
+          var div = document.createElement('div');
+          div.className = 'chat-bubble ' + role;
+          div.innerHTML = html;
+          followup.appendChild(div);
+          scrollIntoViewSafe(div, { behavior: 'smooth', block: 'nearest' });
+          return div;
+        }
+
+        mmReplies.querySelectorAll('[data-mm]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            mmReplies.querySelectorAll('[data-mm]').forEach(function (b) { b.disabled = true; });
+            if (btn.getAttribute('data-mm') === 'yes') {
+              addBubble('user', 'Đúng, mình nghĩ vậy');
+              addBubble('ai', 'Vậy thử tiếp: mũi tên đó do <em>ai</em> vẽ ra? Nếu bạn chỉ biết độ nghiêng theo trục X và trục Y, '
+                + 'làm sao ghép hai thông tin đó thành một hướng duy nhất?');
+            } else {
+              addBubble('user', 'Chưa đúng lắm');
+              addBubble('ai', 'Cảm ơn bạn đã sửa. Vậy mô tả giúp mình: khi nhìn công thức '
+                + '<span class="formula-chip">∇J(θ)</span>, bạn đang hình dung nó là gì?');
+            }
+            bumpTurn();
+          });
+        });
+
+        function submitAnswer() {
+          var val = input.value.trim();
+          if (!val) { return; }
+          addBubble('user', esc(val));
+          input.value = '';
+          bumpTurn();
+          setTimeout(function () {
+            addBubble('ai', 'Mình đang đoán rằng bạn hình dung gradient như một "la bàn chỉ hướng dốc nhất" — đúng không?'
+              + '<div class="quick-replies">'
+              + '<button type="button" class="chip-btn" data-reply="yes">Đúng, đúng vậy</button>'
+              + '<button type="button" class="chip-btn" data-reply="no">Chưa đúng lắm, để mình nói lại</button>'
+              + '</div>');
+            bindQuickReplies();
+          }, 500);
+        }
+
+        function bindQuickReplies() {
+          followup.querySelectorAll('.chip-btn:not([disabled])').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var yes = btn.getAttribute('data-reply') === 'yes';
+              followup.querySelectorAll('.chip-btn').forEach(function (b) { b.disabled = true; });
+              addBubble('user', yes ? 'Đúng, đúng vậy' : 'Chưa đúng lắm, để mình nói lại');
+              addBubble('ai', yes
+                ? 'Tốt. Vậy nếu la bàn chỉ hướng <em>tăng</em> nhanh nhất, bạn phải đi hướng nào để giảm nhanh nhất?'
+                : 'Không sao — bạn thử nói lại bằng cách của bạn xem gradient đang mô tả điều gì?');
+              bumpTurn();
+            });
+          });
+        }
+
+        sendBtn.addEventListener('click', submitAnswer);
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { submitAnswer(); }
+        });
+
+        hintBtn.addEventListener('click', function () {
+          addBubble('ai', 'Gợi ý: chỉ nghĩ về độ nghiêng <em>ngay tại chỗ bạn đứng</em>, không nghĩ về toàn bộ ngọn đồi.');
+        });
+
+        skipBtn.addEventListener('click', function () {
+          addBubble('ai', 'Không sao, mình sẽ hỏi lại câu này ở phần ôn tập sau.');
+          input.disabled = true;
+          sendBtn.disabled = true;
+          hintBtn.disabled = true;
+          skipBtn.disabled = true;
+        });
+
+        pushbackBtn.addEventListener('click', function () {
+          // Recovery: AI cap nhat learner model va dat lai cau hoi moi tu trang thai moi.
+          state.socraticTurn = 0;
+          followup.innerHTML = '';
+          input.disabled = false;
+          sendBtn.disabled = false;
+          hintBtn.disabled = false;
+          skipBtn.disabled = false;
+          input.value = '';
+
+          var why = optionContent.querySelector('.why-asking ul');
+          why.innerHTML = '<li>Bạn cho biết giả thuyết trước của AI <strong>không đúng</strong>.</li>'
+            + '<li>AI bỏ giả định "bạn thiếu liên hệ đạo hàm riêng" và bắt đầu lại từ chỗ rộng hơn.</li>'
+            + '<li>Nên AI hỏi để bạn tự mô tả cách hiểu, thay vì đoán tiếp.</li>';
+
+          var mm = optionContent.querySelector('.mental-model .guess');
+          mm.textContent = '"Mình chưa chắc bạn đang hình dung gradient thế nào — cần bạn nói ra trước."';
+          optionContent.querySelectorAll('#mmReplies [data-mm]').forEach(function (b) { b.disabled = true; });
+
+          document.getElementById('mainQuestion').innerHTML = 'Nói theo cách của bạn: khi bạn nghe "gradient của hàm mất mát", '
+            + 'bạn hình dung ra cái gì trước tiên — một con số, một mũi tên, hay một cái gì khác?';
+
+          counter.textContent = 'Lượt 1';
+          scrollIntoViewSafe(document.getElementById('mainQuestion'), { behavior: 'smooth', block: 'center' });
+        });
+      }
+
+      function bindOptionC() {
+        var toggleBtn = document.getElementById('toggleLabCoach');
+        var view = document.getElementById('labCoachView');
+
+        toggleBtn.addEventListener('click', function () {
+          var willShow = view.classList.contains('hidden');
+          view.classList.toggle('hidden');
+          toggleBtn.textContent = willShow
+            ? 'Ẩn báo cáo Lab Coach'
+            : 'Xem trước báo cáo dành cho Lab Coach (demo)';
+        });
+
+        optionContent.querySelectorAll('[data-cluster-toggle]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var body = btn.closest('.cluster').querySelector('.cluster-body');
+            var willShow = body.classList.contains('hidden');
+            body.classList.toggle('hidden');
+            btn.innerHTML = willShow ? 'Thu gọn' : 'Gom vì&hellip;';
+          });
+        });
+
+        optionContent.querySelectorAll('[data-decide]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var cluster = btn.closest('.cluster');
+            var status = cluster.querySelector('[data-status]');
+            var approve = btn.getAttribute('data-decide') === 'approve';
+            status.className = 'cluster-status ' + (approve ? 'approved' : 'rejected');
+            status.textContent = approve ? 'Đã chấp thuận' : 'Đã từ chối';
+          });
+        });
+
+        optionContent.querySelectorAll('.ambiguous-options').forEach(function (group) {
+          group.querySelectorAll('button').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              group.querySelectorAll('button').forEach(function (b) { b.classList.remove('assigned'); });
+              btn.classList.add('assigned');
+            });
+          });
+        });
+      }
+
+      /* ===================== Shell wiring ===================== */
       pills.forEach(function (p) {
         p.addEventListener('click', function () {
-          pills.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); });
-          p.classList.add('active');
-          p.setAttribute('aria-pressed', 'true');
-          state.option = p.dataset.option;
+          state.option = p.getAttribute('data-option');
+          pills.forEach(function (x) {
+            var on = x === p;
+            x.classList.toggle('active', on);
+            x.setAttribute('aria-pressed', on ? 'true' : 'false');
+          });
+          if (state.view === 'result') {
+            state.socraticTurn = 0;
+            renderOption();
+            rightPanel.scrollTop = 0;
+          }
         });
       });
 
-      /* ---------- Common context → result transition ---------- */
-      completeBtn.addEventListener('click', function () {
-        lessonView.classList.add('hidden');
-        resultView.classList.remove('hidden');
-        renderResult(state.option);
-        resultView.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
+      resetBtn.addEventListener('click', resetAll);
+      backToLessonBtn.addEventListener('click', backToLesson);
+      rightCollapse.addEventListener('click', toggleCollapse);
 
-      function goToLesson() {
-        resultView.classList.add('hidden');
-        lessonView.classList.remove('hidden');
-      }
-      resetBtn.addEventListener('click', goToLesson);
-      resetInline.addEventListener('click', goToLesson);
+      addNoteBtn.addEventListener('click', function () {
+        state.addingNote = !state.addingNote;
+        renderAddNoteForm();
+      });
 
       /* ---------- Facilitator drawer ---------- */
       notesToggle.addEventListener('click', function () {
         drawer.classList.add('open');
         overlay.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
+        drawerClose.focus();
       });
+
       function closeDrawer() {
         drawer.classList.remove('open');
         overlay.classList.remove('open');
         drawer.setAttribute('aria-hidden', 'true');
       }
+
       drawerClose.addEventListener('click', closeDrawer);
       overlay.addEventListener('click', closeDrawer);
+
+      /* ---------- Keyboard ---------- */
+      function isTypingTarget(el) {
+        if (!el) { return false; }
+        var tag = el.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+      }
+
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+        if (e.key === 'Escape') {
+          if (drawer.classList.contains('open')) { closeDrawer(); return; }
+          if (state.editor) { closeEditor(); return; }
+          if (state.addingNote) {
+            state.addingNote = false;
+            renderAddNoteForm();
+            return;
+          }
+        }
+        if (isTypingTarget(document.activeElement)) { return; }
+        if (state.view !== 'notes') { return; }
+        if (e.key === 'ArrowRight') { goToSlide(state.currentSlide + 1); }
+        if (e.key === 'ArrowLeft') { goToSlide(state.currentSlide - 1); }
       });
 
-      /* ---------- Render critical interaction + result per option ---------- */
-      function renderResult(opt) {
-        resultContent.innerHTML = '<div class="generating"><span class="dots"><span></span><span></span><span></span></span> Đang xử lý…</div>';
-        // NOTE: real implementation sẽ gọi API ở đây thay vì setTimeout.
-        setTimeout(function () {
-          if (opt === 'A') resultContent.innerHTML = templateA();
-          else if (opt === 'B') resultContent.innerHTML = templateB();
-          else resultContent.innerHTML = templateC();
-          bindHandlers(opt);
-        }, 600);
-      }
-
-      /* ---------- Option A: Personalized Notes (canned output — thay bằng API thật) ---------- */
-      function templateA() {
-        return '' +
-          '<div class="result-card">' +
-          '<p class="eyebrow">Ghi chú cá nhân hóa</p>' +
-          '<h2>Bản ghi chú của bạn</h2>' +
-          '<div class="note-block">' +
-          '<h4>📌 Tóm tắt</h4>' +
-          '<p>Bài học trình bày thuật toán Gradient Descent: cập nhật trọng số theo hướng ngược gradient để giảm dần hàm mất mát.</p>' +
-          '</div>' +
-          '<div class="note-block">' +
-          '<h4>✅ Bạn đã nắm vững</h4>' +
-          '<ul><li>Công thức cập nhật trọng số <span class="formula-chip">θ = θ − α·∇J(θ)</span></li></ul>' +
-          '</div>' +
-          '<div class="note-block">' +
-          '<h4>🔍 Cần chú ý thêm</h4>' +
-          '<ul>' +
-          '<li>Ảnh hưởng của learning rate khi chọn giá trị quá lớn — bạn từng hỏi: "Learning rate quá lớn thì sao?"</li>' +
-          '<li>Ý nghĩa hình học của gradient — bạn ghi chú: "Hiểu công thức nhưng chưa hình dung được vì sao gradient chỉ hướng dốc nhất."</li>' +
-          '</ul>' +
-          '</div>' +
-          '<p class="disclaimer">Ghi chú do AI tổng hợp từ nội dung bài và các đánh dấu của bạn — có thể chưa chính xác hoàn toàn, hãy kiểm tra lại trước khi lưu.</p>' +
-          '<div class="action-row">' +
-          '<button type="button" class="btn-ghost" id="editNoteBtn" data-editing="false">✏️ Chỉnh sửa</button>' +
-          '<button type="button" class="btn-primary" id="saveNoteBtn">✓ Xác nhận &amp; Lưu</button>' +
-          '</div>' +
-          '<p class="save-confirm hidden" id="saveConfirm">Đã lưu ghi chú ✓</p>' +
-          '</div>';
-      }
-
-      /* ---------- Option B: Socratic Tutor (canned output — thay bằng API thật) ---------- */
-      function templateB() {
-        return '' +
-          '<div class="result-card">' +
-          '<p class="eyebrow">Câu hỏi gợi mở</p>' +
-          '<p class="ai-reasoning">Dựa trên phần bạn đã hiểu (công thức cập nhật trọng số) và điểm bạn còn vướng (ý nghĩa hình học của gradient), mình muốn hỏi thêm…</p>' +
-          '<div class="chat-bubble ai">Nếu bạn đứng trên một ngọn đồi và muốn đi xuống nhanh nhất mà không nhìn thấy đường, bạn sẽ chọn hướng đi như thế nào? Gradient có liên hệ gì với hướng đó?</div>' +
-          '<div class="reply-row">' +
-          '<label for="socraticInput" class="visually-hidden">Trả lời câu hỏi</label>' +
-          '<input type="text" id="socraticInput" placeholder="Trả lời câu hỏi…">' +
-          '<button type="button" class="btn-primary" id="socraticSend">Gửi</button>' +
-          '</div>' +
-          '<div class="reply-links">' +
-          '<button type="button" class="link-btn" id="hintBtn">Xin gợi ý</button>' +
-          '<button type="button" class="link-btn" id="skipBtn">Bỏ qua câu hỏi này</button>' +
-          '</div>' +
-          '<div id="socraticFollowup"></div>' +
-          '</div>';
-      }
-
-      /* ---------- Option C: Gom nhóm cho Lab Coach (canned output — thay bằng API thật) ---------- */
-      function templateC() {
-        return '' +
-          '<div class="result-card">' +
-          '<p class="eyebrow">Đã ghi nhận</p>' +
-          '<h2>Câu hỏi của bạn đã được nhóm lại</h2>' +
-          '<p>Câu hỏi và ghi chú của bạn về <strong>learning rate</strong> và <strong>ý nghĩa hình học của gradient</strong> đã được gộp chung với các học viên có cùng khúc mắc.</p>' +
-          '<div class="stat-row">' +
-          '<div class="stat-chip">9 học viên khác cũng thắc mắc về <strong>learning rate</strong></div>' +
-          '<div class="stat-chip">6 học viên khác vướng <strong>ý nghĩa hình học của gradient</strong></div>' +
-          '</div>' +
-          '<p class="muted">Lab Coach sẽ tổ chức buổi Q&amp;A 15 phút để giải đáp chung sau bài giảng.</p>' +
-          '<button type="button" class="link-btn" id="toggleLabCoach">👀 Xem trước báo cáo dành cho Lab Coach (demo)</button>' +
-          '<div id="labCoachView" class="lab-coach-view hidden">' +
-          '<div class="cluster">' +
-          '<div><span class="cluster-title">Learning rate quá lớn</span><span class="cluster-count">9 học viên</span></div>' +
-          '<div class="cluster-actions">' +
-          '<button type="button" class="btn-ghost small">Từ chối</button>' +
-          '<button type="button" class="btn-primary small">Chấp thuận cho buổi Q&amp;A</button>' +
-          '</div>' +
-          '</div>' +
-          '<div class="cluster">' +
-          '<div><span class="cluster-title">Ý nghĩa hình học của gradient</span><span class="cluster-count">6 học viên</span></div>' +
-          '<div class="cluster-actions">' +
-          '<button type="button" class="btn-ghost small">Từ chối</button>' +
-          '<button type="button" class="btn-primary small">Chấp thuận cho buổi Q&amp;A</button>' +
-          '</div>' +
-          '</div>' +
-          '</div>' +
-          '</div>';
-      }
-
-      /* ---------- Wire up interactions per option (control/recovery affordances) ---------- */
-      function bindHandlers(opt) {
-        if (opt === 'A') {
-          var editBtn = document.getElementById('editNoteBtn');
-          var saveBtn = document.getElementById('saveNoteBtn');
-          var blocks = document.querySelectorAll('.note-block');
-          var confirmMsg = document.getElementById('saveConfirm');
-
-          editBtn.addEventListener('click', function () {
-            var editing = editBtn.dataset.editing === 'true';
-            blocks.forEach(function (b) {
-              b.contentEditable = (!editing).toString();
-              b.classList.toggle('editing', !editing);
-            });
-            editBtn.textContent = editing ? '✏️ Chỉnh sửa' : '✓ Xong';
-            editBtn.dataset.editing = (!editing).toString();
-          });
-
-          saveBtn.addEventListener('click', function () {
-            blocks.forEach(function (b) { b.contentEditable = 'false'; b.classList.remove('editing'); });
-            editBtn.textContent = '✏️ Chỉnh sửa';
-            editBtn.dataset.editing = 'false';
-            confirmMsg.classList.remove('hidden');
-            setTimeout(function () { confirmMsg.classList.add('hidden'); }, 2500);
-          });
-        }
-
-        if (opt === 'B') {
-          var input = document.getElementById('socraticInput');
-          var sendBtn = document.getElementById('socraticSend');
-          var followup = document.getElementById('socraticFollowup');
-          var hintBtn = document.getElementById('hintBtn');
-          var skipBtn = document.getElementById('skipBtn');
-
-          function bindQuickReplies() {
-            document.querySelectorAll('.chip-btn').forEach(function (btn) {
-              btn.addEventListener('click', function () {
-                var msg = btn.dataset.reply === 'yes' ? 'Đúng, đúng vậy' : 'Chưa đúng lắm, để mình giải thích lại';
-                followup.innerHTML += '<div class="chat-bubble user">' + msg + '</div>';
-                document.querySelectorAll('.chip-btn').forEach(function (b) { b.disabled = true; });
-              });
-            });
-          }
-
-          function submitAnswer() {
-            var val = input.value.trim();
-            if (!val) return;
-            followup.innerHTML += '<div class="chat-bubble user">' + escapeHtml(val) + '</div>';
-            input.value = '';
-            setTimeout(function () {
-              followup.innerHTML += '' +
-                '<div class="chat-bubble ai">' +
-                'Mình đang đoán rằng bạn đang hình dung gradient như một "la bàn chỉ hướng dốc nhất" — đúng không?' +
-                '<div class="quick-replies">' +
-                '<button type="button" class="chip-btn" data-reply="yes">Đúng, đúng vậy</button>' +
-                '<button type="button" class="chip-btn" data-reply="no">Chưa đúng lắm, để mình giải thích lại</button>' +
-                '</div>' +
-                '</div>';
-              bindQuickReplies();
-            }, 500);
-          }
-
-          sendBtn.addEventListener('click', submitAnswer);
-          input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitAnswer(); });
-
-          hintBtn.addEventListener('click', function () {
-            followup.innerHTML += '<div class="chat-bubble ai">Gợi ý: nghĩ về hướng nào khiến độ cao giảm nhanh nhất tại đúng vị trí bạn đang đứng.</div>';
-          });
-          skipBtn.addEventListener('click', function () {
-            followup.innerHTML += '<div class="chat-bubble ai">Không sao, mình sẽ hỏi lại câu này ở phần ôn tập sau.</div>';
-          });
-        }
-
-        if (opt === 'C') {
-          var toggleBtn = document.getElementById('toggleLabCoach');
-          var view = document.getElementById('labCoachView');
-          toggleBtn.addEventListener('click', function () {
-            var isHidden = view.classList.contains('hidden');
-            view.classList.toggle('hidden');
-            toggleBtn.textContent = isHidden
-              ? '🙈 Ẩn báo cáo Lab Coach'
-              : '👀 Xem trước báo cáo dành cho Lab Coach (demo)';
-          });
-        }
-      }
-
-      function escapeHtml(str) {
-        return str.replace(/[&<>"']/g, function (s) {
-          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s];
-        });
-      }
+      /* ===================== Init ===================== */
+      state = makeInitialState();
+      renderAll();
     })();
   </script>
 </body>
